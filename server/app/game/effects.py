@@ -232,32 +232,31 @@ def _swap_tile_effect(session: GameSession, tile_id: int):
         and t.id not in occupied_tiles
     ]
 
-    if not neutral_targets:
-        return
+    if neutral_targets:
+        target = random.choice(neutral_targets)
 
-    target = random.choice(neutral_targets)
+        # Pick a random category from the same positive/negative group
+        if tile.color == TileColor.GREEN:
+            candidates = [
+                TileCategory.POSITIVE_MINOR,
+                TileCategory.POSITIVE_MEDIUM,
+                TileCategory.POSITIVE_MAJOR,
+            ]
+        else:
+            candidates = [
+                TileCategory.NEGATIVE_MINOR,
+                TileCategory.NEGATIVE_MEDIUM,
+                TileCategory.NEGATIVE_MAJOR,
+            ]
 
-    # Pick a random category from the same positive/negative group
-    if tile.color == TileColor.GREEN:
-        candidates = [
-            TileCategory.POSITIVE_MINOR,
-            TileCategory.POSITIVE_MEDIUM,
-            TileCategory.POSITIVE_MAJOR,
-        ]
-    else:
-        candidates = [
-            TileCategory.NEGATIVE_MINOR,
-            TileCategory.NEGATIVE_MEDIUM,
-            TileCategory.NEGATIVE_MAJOR,
-        ]
+        new_cat = random.choice(candidates)
+        new_color, new_effects = TILE_EFFECTS[new_cat]
+        target.category = new_cat
+        target.color = new_color
+        target.effect = random.choice(new_effects)
 
-    new_cat = random.choice(candidates)
-    new_color, new_effects = TILE_EFFECTS[new_cat]
-    target.category = new_cat
-    target.color = new_color
-    target.effect = random.choice(new_effects)
-
-    # Reset original tile to neutral
+    # Reset original tile to neutral regardless of whether a target was found.
+    # If all neutral tiles were occupied, the effect simply disappears.
     neutral_color, neutral_effects = TILE_EFFECTS[TileCategory.NEUTRAL]
     tile.category = TileCategory.NEUTRAL
     tile.color = neutral_color
