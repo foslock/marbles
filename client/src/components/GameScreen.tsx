@@ -62,6 +62,45 @@ export function GameScreen({
 }: Props) {
   const [showScoreboard, setShowScoreboard] = useState(false);
 
+  // ── Dice-settle gating ───────────────────────────────────────────────────
+  // Buffer the move animation until the dice overlay reports it has visually
+  // settled (landed + held for 1 s).  This prevents tokens from moving while
+  // the die is still bouncing.
+  const diceSettledRef = useRef(true);
+  const [activeMoveAnimation, setActiveMoveAnimation] = useState<MoveAnimation | null>(null);
+  const movePendingRef = useRef<MoveAnimation | null>(null);
+
+  // When a new dice roll comes in, mark as unsettled
+  useEffect(() => {
+    if (diceResult) {
+      diceSettledRef.current = false;
+    } else {
+      // No roll in progress — allow moves through immediately
+      diceSettledRef.current = true;
+    }
+  }, [diceResult]);
+
+  // When moveAnimation arrives, either pass through or buffer
+  useEffect(() => {
+    if (!moveAnimation) {
+      if (!movePendingRef.current) setActiveMoveAnimation(null);
+      return;
+    }
+    if (diceSettledRef.current) {
+      setActiveMoveAnimation(moveAnimation);
+    } else {
+      movePendingRef.current = moveAnimation;
+    }
+  }, [moveAnimation]);
+
+  const onDiceSettled = useCallback(() => {
+    diceSettledRef.current = true;
+    if (movePendingRef.current) {
+      setActiveMoveAnimation(movePendingRef.current);
+      movePendingRef.current = null;
+    }
+  }, []);
+
   // ── Tile effect buffering ────────────────────────────────────────────────
   // Hold incoming tile effects until the move animation + landing completes,
   // so the popup never appears while the token is still flying.
@@ -74,12 +113,12 @@ export function GameScreen({
       setEffectToShow(null);
       return;
     }
-    if (moveAnimation) {
+    if (activeMoveAnimation) {
       effectPendingRef.current = tileEffect;
     } else {
       setEffectToShow(tileEffect);
     }
-  }, [tileEffect]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [tileEffect, activeMoveAnimation]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Choice buffering ─────────────────────────────────────────────────────
   // Same pattern as above — hold the choice prompt until animation finishes
@@ -93,7 +132,7 @@ export function GameScreen({
       setChoiceToShow(null);
       return;
     }
-    if (moveAnimation) {
+    if (activeMoveAnimation) {
       choicePendingRef.current = awaitingChoice;
     } else {
       setChoiceToShow(awaitingChoice);
@@ -224,7 +263,7 @@ export function GameScreen({
             players={sortedPlayers}
             reachableTiles={needsToChooseMove ? diceResult.reachableTiles : []}
             onTileClick={needsToChooseMove ? handleChooseMove : undefined}
-            moveAnimation={moveAnimation}
+            moveAnimation={activeMoveAnimation}
             onAnimationComplete={handleAnimationComplete}
             myPlayerId={playerId}
             activePlayerId={displayedTurnPlayerId}
@@ -242,11 +281,13 @@ export function GameScreen({
         {!effectToShow && !choiceToShow && !minigameResults && (
           <DiceOverlay
             isMyTurn={isMyTurn}
+            isSpectator={isSpectator}
             rolledValue={diceResult ? diceResult.roll : null}
             hasDoubleDice={(myPlayer?.modifiers.double_dice ?? 0) > 0}
             hasWorstDice={(myPlayer?.modifiers.worst_dice ?? 0) > 0}
             hasRerolls={(myPlayer?.modifiers.rerolls ?? 0) > 0}
             onRoll={onRollDice}
+            onDiceSettled={onDiceSettled}
           />
         )}
 
