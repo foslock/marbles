@@ -229,11 +229,6 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
         ctx.lineWidth = 4;
         ctx.stroke();
 
-        // Warm fill
-        _roundRect(ctx, rx, ry, TILE_W, TILE_H, TILE_CORNER);
-        ctx.fillStyle = `rgba(243, 156, 18, ${0.10 + pulse * 0.18})`;
-        ctx.fill();
-
         // Outer pulsing ring
         _roundRect(ctx, rx - 5, ry - 5, TILE_W + 10, TILE_H + 10, TILE_CORNER + 5);
         ctx.strokeStyle = `rgba(243, 156, 18, ${pulse * 0.55})`;
