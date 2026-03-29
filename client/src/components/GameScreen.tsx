@@ -77,11 +77,34 @@ export function GameScreen({
     }
   }, [tileEffect]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Choice buffering ─────────────────────────────────────────────────────
+  // Same pattern as above — hold the choice prompt until animation finishes
+  // so it never appears before the player has landed on the tile.
+  const choicePendingRef = useRef<TileEffect | null>(null);
+  const [choiceToShow, setChoiceToShow] = useState<TileEffect | null>(null);
+
+  useEffect(() => {
+    if (!awaitingChoice) {
+      choicePendingRef.current = null;
+      setChoiceToShow(null);
+      return;
+    }
+    if (moveAnimation) {
+      choicePendingRef.current = awaitingChoice;
+    } else {
+      setChoiceToShow(awaitingChoice);
+    }
+  }, [awaitingChoice]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleAnimationComplete = useCallback(() => {
     onClearMoveAnimation();
     if (effectPendingRef.current) {
       setEffectToShow(effectPendingRef.current);
       effectPendingRef.current = null;
+    }
+    if (choicePendingRef.current) {
+      setChoiceToShow(choicePendingRef.current);
+      choicePendingRef.current = null;
     }
   }, [onClearMoveAnimation]);
 
@@ -233,17 +256,17 @@ export function GameScreen({
       </div>
 
       {/* Choice overlay */}
-      {awaitingChoice && awaitingChoice.playerId === playerId && (
+      {choiceToShow && choiceToShow.playerId === playerId && (
         <div style={styles.overlay}>
           <div style={styles.choiceCard}>
-            <h3 style={styles.choiceTitle}>{awaitingChoice.message}</h3>
+            <h3 style={styles.choiceTitle}>{choiceToShow.message}</h3>
             <div style={styles.choiceOptions}>
-              {awaitingChoice.options?.map((opt) => (
+              {choiceToShow.options?.map((opt) => (
                 <button
                   key={opt.id}
                   style={styles.choiceBtn}
                   onClick={() =>
-                    onMakeChoice(awaitingChoice.choiceType!, opt.id)
+                    onMakeChoice(choiceToShow.choiceType!, opt.id)
                   }
                 >
                   {opt.name}
