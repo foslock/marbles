@@ -172,7 +172,7 @@ async def run_cpu_turn(sio, session, player, get_reachable_fn, check_battle_fn):
                 "color": original_color,
                 "boardUpdates": board_updates,
             }, room=session.id)
-            await asyncio.sleep(1.3)  # Wait for swap animation
+            await asyncio.sleep(2.0)  # Wait for swap animation (3s client-side)
 
     # ── End turn (no battle — already checked above) ─────────────────────────
     await check_battle_fn(session, player)

@@ -19,12 +19,12 @@ interface Props {
 }
 
 // ── Physics constants ────────────────────────────────────────────────────────
-const FRICTION = 0.985;
-const ANGULAR_FRICTION = 0.98;
-const BOUNCE = 0.55;
+const FRICTION = 0.97;
+const ANGULAR_FRICTION = 0.96;
+const BOUNCE = 0.4;
 const GRAVITY = 0;
 const DIE_SIZE = 72;
-const SETTLE_THRESHOLD = 0.4;
+const SETTLE_THRESHOLD = 0.5;
 const LAND_HOLD_MS = 1000;   // time the result stays visible after landing
 const FADE_DURATION = 500;   // ms for fade-out after hold
 const FADE_IN_MS = 300;      // quick fade-in for non-active players
@@ -176,9 +176,12 @@ export function DiceOverlay({
         if (d.y < 0) { d.y = 0; d.vy = -d.vy * BOUNCE; d.angularV += (Math.random() - 0.5) * 0.1; }
         if (d.y + DIE_SIZE > h) { d.y = h - DIE_SIZE; d.vy = -d.vy * BOUNCE; d.angularV += (Math.random() - 0.5) * 0.1; }
 
-        // Cycle face randomly
+        // Cycle face — rate proportional to speed (fast = rapid changes, slow = lazy)
+        const dieSpeed = Math.hypot(d.vx, d.vy);
         d.faceTimer++;
-        if (d.faceTimer % 4 === 0) {
+        // At full speed (~15+) change every 2 frames; near settle (~1) every 12+
+        const interval = Math.max(2, Math.round(12 - dieSpeed * 0.8));
+        if (d.faceTimer % interval === 0) {
           d.face = Math.floor(Math.random() * 6) + 1;
         }
 
