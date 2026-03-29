@@ -6,7 +6,7 @@ import type {
   MinigameResults,
   ActivityItem,
 } from '../types/game';
-import { GameBoard, type MoveAnimation, type TileSwapAnimation } from './GameBoard';
+import { GameBoard, type MoveAnimation, type TileSwapAnimation, type StealAnimation } from './GameBoard';
 import { DiceRoller } from './DiceRoller';
 import { TileEffectOverlay } from './TileEffectOverlay';
 import { MinigameResultsOverlay } from './MinigameResultsOverlay';
@@ -31,6 +31,8 @@ interface Props {
   onClearMinigameResults: () => void;
   onClearMoveAnimation: () => void;
   onClearTileSwapAnimation: () => void;
+  stealAnimation: StealAnimation | null;
+  onClearStealAnimation: () => void;
   onTurnComplete: () => void;
   onEndGame: () => void;
 }
@@ -53,6 +55,8 @@ export function GameScreen({
   onClearMinigameResults,
   onClearMoveAnimation,
   onClearTileSwapAnimation,
+  stealAnimation,
+  onClearStealAnimation,
   onTurnComplete,
   onEndGame,
 }: Props) {
@@ -216,6 +220,8 @@ export function GameScreen({
             activePlayerId={displayedTurnPlayerId}
             tileSwapAnimation={tileSwapAnimation}
             onSwapAnimationComplete={onClearTileSwapAnimation}
+            stealAnimation={stealAnimation}
+            onStealAnimationComplete={onClearStealAnimation}
           />
         )}
 

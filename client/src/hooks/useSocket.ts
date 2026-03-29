@@ -35,6 +35,12 @@ export function useSocket() {
   const [moveAnimation, setMoveAnimation] = useState<{ playerId: string; path: number[] } | null>(null);
   const [tileSwapAnimation, setTileSwapAnimation] = useState<TileSwapAnimation | null>(null);
   const [activityFeed, setActivityFeed] = useState<ActivityItem[]>([]);
+  const [stealAnimation, setStealAnimation] = useState<{
+    fromPlayerId: string;
+    toPlayerId: string;
+    type: 'points' | 'marble';
+    amount?: number;
+  } | null>(null);
 
   useEffect(() => {
     const socket = io(SOCKET_URL, {
@@ -172,8 +178,44 @@ export function useSocket() {
       setAwaitingChoice(data);
     });
 
-    socket.on('choice_resolved', () => {
+    socket.on('choice_resolved', (data: {
+      playerId: string;
+      type: string;
+      targetId: string;
+      targetName: string;
+      message: string;
+      amount?: number;
+    }) => {
       setAwaitingChoice(null);
+      // Activity item + sound + animation for steal/give effects
+      const isSteal = data.type === 'steal_points' || data.type === 'steal_marble';
+      const isGive = data.type === 'give_points' || data.type === 'give_marble';
+      if (isSteal || isGive) {
+        SFX.stealEffect();
+        Haptics.medium();
+        const color: ActivityItem['color'] = isSteal ? 'red' : 'neutral';
+        const now = Date.now();
+        setActivityFeed((prev) => [
+          ...prev,
+          { id: `cr-${now}`, message: data.message, color, timestamp: now },
+        ]);
+        // Trigger steal animation on the board
+        if (isSteal) {
+          setStealAnimation({
+            fromPlayerId: data.targetId,
+            toPlayerId: data.playerId,
+            type: data.type === 'steal_marble' ? 'marble' : 'points',
+            amount: data.amount,
+          });
+        } else {
+          setStealAnimation({
+            fromPlayerId: data.playerId,
+            toPlayerId: data.targetId,
+            type: data.type === 'give_marble' ? 'marble' : 'points',
+            amount: data.amount,
+          });
+        }
+      }
     });
 
     socket.on('minigame_start', (data: MinigameInfo) => {
@@ -303,6 +345,7 @@ export function useSocket() {
   }, []);
   const clearMoveAnimation = useCallback(() => setMoveAnimation(null), []);
   const clearTileSwapAnimation = useCallback(() => setTileSwapAnimation(null), []);
+  const clearStealAnimation = useCallback(() => setStealAnimation(null), []);
   const turnComplete = useCallback(() => {
     socketRef.current?.emit('turn_complete', {});
   }, []);
@@ -330,6 +373,7 @@ export function useSocket() {
     awaitingChoice,
     moveAnimation,
     tileSwapAnimation,
+    stealAnimation,
     activityFeed,
     addActivityItem: (message: string, color: ActivityItem['color']) => {
       setActivityFeed((prev) => [
@@ -349,6 +393,7 @@ export function useSocket() {
     clearMinigameResults,
     clearMoveAnimation,
     clearTileSwapAnimation,
+    clearStealAnimation,
     turnComplete,
     endGame,
     addCpuPlayer,

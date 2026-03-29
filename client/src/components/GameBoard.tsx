@@ -14,6 +14,13 @@ export interface TileSwapAnimation {
   color: string; // 'green' or 'red'
 }
 
+export interface StealAnimation {
+  fromPlayerId: string;
+  toPlayerId: string;
+  type: 'points' | 'marble';
+  amount?: number;
+}
+
 interface Props {
   board: BoardData | null;
   players: PlayerState[];
@@ -25,6 +32,8 @@ interface Props {
   activePlayerId?: string | null;
   tileSwapAnimation?: TileSwapAnimation | null;
   onSwapAnimationComplete?: () => void;
+  stealAnimation?: StealAnimation | null;
+  onStealAnimationComplete?: () => void;
   initialScale?: number;
 }
 
@@ -33,6 +42,12 @@ const TILE_W = 38;
 const TILE_H = 38;
 const TILE_CORNER = 7;
 const INNER_CIRCLE_R = 10;
+
+// Token dimensions — larger for clarity, shrinks when sharing a tile
+const TOKEN_RADIUS = 15;
+const TOKEN_RADIUS_SHARED = 10;
+const TOKEN_FONT = '16px sans-serif';
+const TOKEN_FONT_SHARED = '11px sans-serif';
 
 const TILE_BG = '#1a2e4a';
 const TILE_COLORS = {
@@ -51,7 +66,7 @@ const MOVE_SPEED = 350;
 // ms for the landing ring animation after token arrives
 const LANDING_DURATION = 800;
 
-export function GameBoard({ board, players, reachableTiles, onTileClick, moveAnimation, onAnimationComplete, myPlayerId, activePlayerId, tileSwapAnimation, onSwapAnimationComplete, initialScale = PLAYER_ZOOM }: Props) {
+export function GameBoard({ board, players, reachableTiles, onTileClick, moveAnimation, onAnimationComplete, myPlayerId, activePlayerId, tileSwapAnimation, onSwapAnimationComplete, stealAnimation, onStealAnimationComplete, initialScale = PLAYER_ZOOM }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
@@ -86,6 +101,25 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
   } | null>(null);
   const swapRafRef = useRef<number>(0);
 
+  // Steal animation state
+  const stealAnimRef = useRef<{
+    fromPlayerId: string;
+    toPlayerId: string;
+    type: 'points' | 'marble';
+    amount?: number;
+    startTime: number;
+  } | null>(null);
+  const stealRafRef = useRef<number>(0);
+
+  // Smooth panning — refs to track current/target for lerp
+  const offsetRef = useRef(offset);
+  const scaleRef = useRef(scale);
+  const panRafRef = useRef<number>(0);
+
+  // Keep refs in sync with state
+  useEffect(() => { offsetRef.current = offset; }, [offset]);
+  useEffect(() => { scaleRef.current = scale; }, [scale]);
+
   const reachableSet = new Set(reachableTiles.map((r) => r.tileId));
 
   // Compute offset to center a board-coordinate point at the canvas centre
@@ -111,6 +145,39 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
     setOffset(off);
   }, [_centerOffset]);
 
+  // Smooth pan to a tile over `duration` ms using easeInOutQuad
+  const smoothCenterOnTile = useCallback((tileX: number, tileY: number, s: number, duration = 600) => {
+    const targetOff = _centerOffset(tileX, tileY, s);
+    const startOff = { ...offsetRef.current };
+    const startScale = scaleRef.current;
+    const startTime = performance.now();
+
+    if (panRafRef.current) cancelAnimationFrame(panRafRef.current);
+
+    const tick = () => {
+      const elapsed = performance.now() - startTime;
+      const t = Math.min(elapsed / duration, 1);
+      const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+
+      const newScale = startScale + (s - startScale) * ease;
+      const newOff = {
+        x: startOff.x + (targetOff.x - startOff.x) * ease,
+        y: startOff.y + (targetOff.y - startOff.y) * ease,
+      };
+
+      setScale(newScale);
+      setOffset(newOff);
+
+      if (t < 1) {
+        panRafRef.current = requestAnimationFrame(tick);
+      } else {
+        panRafRef.current = 0;
+      }
+    };
+
+    panRafRef.current = requestAnimationFrame(tick);
+  }, [_centerOffset]);
+
   // Center on the local player's tile
   const centerOnMyPlayer = useCallback(() => {
     if (!board || !myPlayerId) return;
@@ -129,17 +196,15 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [board?.width]); // only on initial board load (width is stable after generation)
 
-  // Follow the active player when the turn changes.
+  // Follow the active player when the turn changes — smooth pan.
   useEffect(() => {
     if (!board || !activePlayerId) return;
-    if (activePlayerId === myPlayerId) {
-      centerOnMyPlayer();
-    } else {
-      const active = players.find((p) => p.id === activePlayerId);
-      if (!active) return;
-      const tile = board.tiles[String(active.currentTile)];
-      if (tile) centerOnTile(tile.x, tile.y, PLAYER_ZOOM);
-    }
+    const target = activePlayerId === myPlayerId
+      ? players.find((p) => p.id === myPlayerId)
+      : players.find((p) => p.id === activePlayerId);
+    if (!target) return;
+    const tile = board.tiles[String(target.currentTile)];
+    if (tile) smoothCenterOnTile(tile.x, tile.y, PLAYER_ZOOM, 700);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activePlayerId]);
 
@@ -269,10 +334,11 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
     for (const [tileIdStr, tilePlayers] of Object.entries(tilePlayerMap)) {
       const tile = board.tiles[tileIdStr];
       if (!tile) continue;
+      const shared = tilePlayers.length > 1;
       for (let i = 0; i < tilePlayers.length; i++) {
         const p = tilePlayers[i];
         const angle = (i / tilePlayers.length) * Math.PI * 2 - Math.PI / 2;
-        const spread = tilePlayers.length > 1 ? 14 : 0;
+        const spread = shared ? 16 : 0;
         const isActive = p.id === activePlayerId;
         _drawToken(
           ctx,
@@ -282,6 +348,7 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
           isActive,
           isActive ? expandPulse : 0,
           pulse,
+          shared,
         );
       }
     }
@@ -299,11 +366,11 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
 
         // Trail
         ctx.beginPath();
-        ctx.arc(ax, ay, 14, 0, Math.PI * 2);
+        ctx.arc(ax, ay, TOKEN_RADIUS + 4, 0, Math.PI * 2);
         ctx.fillStyle = 'rgba(243, 156, 18, 0.3)';
         ctx.fill();
 
-        _drawToken(ctx, ax, ay, animPlayer, false, 0, pulse);
+        _drawToken(ctx, ax, ay, animPlayer, false, 0, pulse, false);
       }
     }
 
@@ -350,10 +417,10 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
       }
     }
 
-    // Draw tile swap animation
+    // Draw tile swap animation — prominent bubble traveling between tiles
     const swapAnim = swapAnimRef.current;
     if (swapAnim) {
-      const SWAP_DURATION = 1200;
+      const SWAP_DURATION = 2000;
       const elapsed = performance.now() - swapAnim.startTime;
       const t = Math.min(elapsed / SWAP_DURATION, 1);
 
@@ -365,32 +432,173 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
       const sourceTile = board.tiles[String(swapAnim.sourceTileId)];
       const targetTile = board.tiles[String(swapAnim.targetTileId)];
 
-      // Phase 1 (0–0.45): circle rises from source tile and fades out
-      if (t < 0.45 && sourceTile) {
-        const p1 = t / 0.45;
-        const riseY = sourceTile.y - p1 * 30;
-        const alpha = (1 - p1) * 0.8;
+      const BUBBLE_R = INNER_CIRCLE_R + 6;
+
+      // Phase 1 (0–0.3): bubble rises from source tile with expanding ring
+      if (t < 0.3 && sourceTile) {
+        const p1 = t / 0.3;
+        const riseY = sourceTile.y - p1 * 40;
+        const alpha = Math.min(p1 * 3, 1) * 0.9;
+
+        // Expanding ring at source
+        const ringR = INNER_CIRCLE_R + p1 * 30;
         ctx.beginPath();
-        ctx.arc(sourceTile.x, riseY, INNER_CIRCLE_R, 0, Math.PI * 2);
+        ctx.arc(sourceTile.x, sourceTile.y, ringR, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(${swapRgb}, ${(1 - p1) * 0.6})`;
+        ctx.lineWidth = 3;
+        ctx.stroke();
+
+        // The bubble itself
+        ctx.beginPath();
+        ctx.arc(sourceTile.x, riseY, BUBBLE_R, 0, Math.PI * 2);
         ctx.fillStyle = `rgba(${swapRgb}, ${alpha})`;
         ctx.fill();
-        ctx.strokeStyle = `rgba(${swapRgb}, ${alpha * 0.6})`;
+        ctx.shadowColor = `rgba(${swapRgb}, 0.6)`;
+        ctx.shadowBlur = 12;
+        ctx.strokeStyle = `rgba(255, 255, 255, ${alpha * 0.5})`;
         ctx.lineWidth = 2;
         ctx.stroke();
+        ctx.shadowBlur = 0;
       }
 
-      // Phase 2 (0.55–1.0): circle fades in above target tile and settles
-      if (t > 0.55 && targetTile) {
-        const p2 = (t - 0.55) / 0.45;
-        const settleY = targetTile.y - 30 + p2 * 30;
-        const alpha = p2 * 0.8;
+      // Phase 2 (0.3–0.7): bubble travels from source to target in an arc
+      if (t >= 0.3 && t < 0.7 && sourceTile && targetTile) {
+        const p2 = (t - 0.3) / 0.4;
+        const ease = p2 < 0.5 ? 2 * p2 * p2 : 1 - Math.pow(-2 * p2 + 2, 2) / 2;
+        const sx = sourceTile.x;
+        const sy = sourceTile.y - 40; // start from risen position
+        const ex = targetTile.x;
+        const ey = targetTile.y - 40;
+        const midY = Math.min(sy, ey) - 60; // arc upward
+        const bx = sx + (ex - sx) * ease;
+        const by = sy + (midY - sy) * 2 * ease * (1 - ease) + (ey - sy) * ease * ease;
+
+        // Trail particles
+        for (let i = 0; i < 3; i++) {
+          const trailT = Math.max(0, ease - i * 0.08);
+          const trailX = sx + (ex - sx) * trailT;
+          const trailY = sy + (midY - sy) * 2 * trailT * (1 - trailT) + (ey - sy) * trailT * trailT;
+          ctx.beginPath();
+          ctx.arc(trailX, trailY, BUBBLE_R * (0.4 - i * 0.1), 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(${swapRgb}, ${0.3 - i * 0.1})`;
+          ctx.fill();
+        }
+
+        // Main bubble
         ctx.beginPath();
-        ctx.arc(targetTile.x, settleY, INNER_CIRCLE_R, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(${swapRgb}, ${alpha})`;
+        ctx.arc(bx, by, BUBBLE_R, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${swapRgb}, 0.9)`;
         ctx.fill();
-        ctx.strokeStyle = `rgba(${swapRgb}, ${alpha * 0.6})`;
+        ctx.shadowColor = `rgba(${swapRgb}, 0.7)`;
+        ctx.shadowBlur = 16;
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
         ctx.lineWidth = 2;
         ctx.stroke();
+        ctx.shadowBlur = 0;
+      }
+
+      // Phase 3 (0.7–1.0): bubble settles into target tile with expanding ring
+      if (t >= 0.7 && targetTile) {
+        const p3 = (t - 0.7) / 0.3;
+        const settleY = targetTile.y - 40 + p3 * 40;
+        const alpha = (1 - p3 * 0.3) * 0.9;
+
+        // The bubble settling
+        ctx.beginPath();
+        ctx.arc(targetTile.x, settleY, BUBBLE_R * (1 - p3 * 0.3), 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${swapRgb}, ${alpha})`;
+        ctx.fill();
+        ctx.shadowColor = `rgba(${swapRgb}, 0.6)`;
+        ctx.shadowBlur = 12;
+        ctx.strokeStyle = `rgba(255, 255, 255, ${alpha * 0.4})`;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+
+        // Expanding ring at target
+        if (p3 > 0.5) {
+          const ringP = (p3 - 0.5) / 0.5;
+          const ringR = INNER_CIRCLE_R + ringP * 25;
+          ctx.beginPath();
+          ctx.arc(targetTile.x, targetTile.y, ringR, 0, Math.PI * 2);
+          ctx.strokeStyle = `rgba(${swapRgb}, ${(1 - ringP) * 0.6})`;
+          ctx.lineWidth = 3;
+          ctx.stroke();
+        }
+      }
+    }
+
+    // Draw steal animation — icon arcing from source to target player
+    const stealAnim = stealAnimRef.current;
+    if (stealAnim && board) {
+      const STEAL_DURATION = 900;
+      const elapsed = performance.now() - stealAnim.startTime;
+      const t = Math.min(elapsed / STEAL_DURATION, 1);
+
+      const fromPlayer = players.find((p) => p.id === stealAnim.fromPlayerId);
+      const toPlayer = players.find((p) => p.id === stealAnim.toPlayerId);
+      if (fromPlayer && toPlayer) {
+        const fromTile = board.tiles[String(fromPlayer.currentTile)];
+        const toTile = board.tiles[String(toPlayer.currentTile)];
+        if (fromTile && toTile) {
+          // Ease out cubic
+          const ease = 1 - Math.pow(1 - t, 3);
+          const fx = fromTile.x;
+          const fy = fromTile.y;
+          const tx2 = toTile.x;
+          const ty2 = toTile.y;
+          // Arc upward
+          const midY = Math.min(fy, ty2) - 50;
+          const cx = fx + (tx2 - fx) * ease;
+          const cy = fy + (midY - fy) * 2 * ease * (1 - ease) + (ty2 - fy) * ease * ease;
+
+          // Glow trail
+          const trailAlpha = 0.4 * (1 - t);
+          ctx.beginPath();
+          ctx.arc(cx, cy, 12, 0, Math.PI * 2);
+          ctx.fillStyle = stealAnim.type === 'marble'
+            ? `rgba(243, 156, 18, ${trailAlpha})`
+            : `rgba(204, 214, 246, ${trailAlpha})`;
+          ctx.fill();
+
+          // Icon
+          const iconAlpha = t < 0.1 ? t / 0.1 : t > 0.85 ? (1 - t) / 0.15 : 1;
+          ctx.globalAlpha = iconAlpha;
+          ctx.font = '18px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(stealAnim.type === 'marble' ? '\uD83D\uDD2E' : '\u2B50', cx, cy);
+          ctx.globalAlpha = 1;
+
+          // Amount label
+          if (stealAnim.amount && t < 0.7) {
+            ctx.font = 'bold 10px sans-serif';
+            ctx.fillStyle = `rgba(255, 255, 255, ${(1 - t / 0.7) * 0.9})`;
+            ctx.fillText(`${stealAnim.amount}`, cx, cy - 14);
+          }
+
+          // Burst at source on start
+          if (t < 0.3) {
+            const bt = t / 0.3;
+            const burstR = 8 + bt * 20;
+            ctx.beginPath();
+            ctx.arc(fx, fy, burstR, 0, Math.PI * 2);
+            ctx.strokeStyle = `rgba(231, 76, 60, ${(1 - bt) * 0.7})`;
+            ctx.lineWidth = 2;
+            ctx.stroke();
+          }
+
+          // Burst at destination on arrival
+          if (t > 0.7) {
+            const bt = (t - 0.7) / 0.3;
+            const burstR = 8 + bt * 20;
+            ctx.beginPath();
+            ctx.arc(tx2, ty2, burstR, 0, Math.PI * 2);
+            ctx.strokeStyle = `rgba(39, 174, 96, ${(1 - bt) * 0.7})`;
+            ctx.lineWidth = 2;
+            ctx.stroke();
+          }
+        }
       }
     }
 
@@ -452,7 +660,7 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
         if (landingElapsed >= LANDING_DURATION) {
           landingRef.current = null;
           drawRef.current();
-          // Re-centre on destination
+          // Re-centre on destination (smooth)
           const lastTileId = moveAnimation.path[moveAnimation.path.length - 1];
           const destTile = board.tiles[String(lastTileId)];
           if (destTile) {
@@ -460,7 +668,7 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
               moveAnimation.playerId === myPlayerId ||
               moveAnimation.playerId === activePlayerId
             ) {
-              centerOnTile(destTile.x, destTile.y, PLAYER_ZOOM);
+              smoothCenterOnTile(destTile.x, destTile.y, PLAYER_ZOOM, 400);
             }
           }
           onAnimationComplete?.();
@@ -518,12 +726,12 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
       animRef.current = null;
       landingRef.current = null;
     };
-  }, [moveAnimation, board, onAnimationComplete, myPlayerId, activePlayerId, centerOnTile]);
+  }, [moveAnimation, board, onAnimationComplete, myPlayerId, activePlayerId, centerOnTile, smoothCenterOnTile]);
 
-  // Tile swap animation
+  // Tile swap animation — camera follows the effect bubble
   useEffect(() => {
     if (!tileSwapAnimation || !board) return;
-    const SWAP_DURATION = 1200;
+    const SWAP_DURATION = 2000; // longer for camera panning
 
     swapAnimRef.current = {
       sourceTileId: tileSwapAnimation.sourceTileId,
@@ -531,6 +739,20 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
       color: tileSwapAnimation.color,
       startTime: performance.now(),
     };
+
+    // Pan camera to the source tile first
+    const sourceTile = board.tiles[String(tileSwapAnimation.sourceTileId)];
+    const targetTile = board.tiles[String(tileSwapAnimation.targetTileId)];
+    if (sourceTile) {
+      smoothCenterOnTile(sourceTile.x, sourceTile.y, PLAYER_ZOOM * 1.1, 400);
+    }
+
+    // At ~40% through, pan to target tile
+    const panToTargetTimer = setTimeout(() => {
+      if (targetTile) {
+        smoothCenterOnTile(targetTile.x, targetTile.y, PLAYER_ZOOM * 1.1, 500);
+      }
+    }, 800);
 
     const tick = () => {
       const anim = swapAnimRef.current;
@@ -549,10 +771,50 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
     swapRafRef.current = requestAnimationFrame(tick);
 
     return () => {
+      clearTimeout(panToTargetTimer);
       if (swapRafRef.current) cancelAnimationFrame(swapRafRef.current);
       swapAnimRef.current = null;
     };
-  }, [tileSwapAnimation, board, onSwapAnimationComplete]);
+  }, [tileSwapAnimation, board, onSwapAnimationComplete, smoothCenterOnTile]);
+
+  // Steal animation
+  useEffect(() => {
+    if (!stealAnimation || !board) return;
+    const STEAL_DURATION = 900;
+
+    stealAnimRef.current = {
+      ...stealAnimation,
+      startTime: performance.now(),
+    };
+
+    const tick = () => {
+      const anim = stealAnimRef.current;
+      if (!anim) return;
+      const elapsed = performance.now() - anim.startTime;
+      drawRef.current();
+      if (elapsed >= STEAL_DURATION) {
+        stealAnimRef.current = null;
+        drawRef.current();
+        onStealAnimationComplete?.();
+      } else {
+        stealRafRef.current = requestAnimationFrame(tick);
+      }
+    };
+
+    stealRafRef.current = requestAnimationFrame(tick);
+
+    return () => {
+      if (stealRafRef.current) cancelAnimationFrame(stealRafRef.current);
+      stealAnimRef.current = null;
+    };
+  }, [stealAnimation, board, onStealAnimationComplete]);
+
+  // Clean up pan animation on unmount
+  useEffect(() => {
+    return () => {
+      if (panRafRef.current) cancelAnimationFrame(panRafRef.current);
+    };
+  }, []);
 
   // Pan handlers
   const handlePointerDown = (e: React.PointerEvent) => {
@@ -657,26 +919,36 @@ function _drawToken(
   isActive = false,
   expandPulse = 0,
   _pulse = 0,
+  shared = false,
 ) {
+  const r = shared ? TOKEN_RADIUS_SHARED : TOKEN_RADIUS;
+  const font = shared ? TOKEN_FONT_SHARED : TOKEN_FONT;
+
   if (isActive) {
     // Pulsing expanding circle that fades out
-    const radius = 12 + expandPulse * 18;
+    const radius = r + 4 + expandPulse * 20;
     const alpha = 0.5 * (1 - expandPulse);
     ctx.beginPath();
     ctx.arc(px, py, radius, 0, Math.PI * 2);
     ctx.strokeStyle = `rgba(243, 156, 18, ${alpha})`;
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 2.5;
     ctx.stroke();
   }
 
+  // Drop shadow for depth
   ctx.beginPath();
-  ctx.arc(px, py, 10, 0, Math.PI * 2);
+  ctx.arc(px + 1, py + 1, r, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.arc(px, py, r, 0, Math.PI * 2);
   ctx.fillStyle = p.token?.color || '#fff';
   ctx.fill();
   ctx.strokeStyle = '#fff';
-  ctx.lineWidth = 2;
+  ctx.lineWidth = shared ? 1.5 : 2.5;
   ctx.stroke();
-  ctx.font = '12px sans-serif';
+  ctx.font = font;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(p.token?.emoji || '?', px, py + 1);
