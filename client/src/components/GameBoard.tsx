@@ -8,6 +8,12 @@ export interface MoveAnimation {
   path: number[]; // tile IDs to traverse
 }
 
+export interface TileSwapAnimation {
+  sourceTileId: number;
+  targetTileId: number;
+  color: string; // 'green' or 'red'
+}
+
 interface Props {
   board: BoardData | null;
   players: PlayerState[];
@@ -17,6 +23,8 @@ interface Props {
   onAnimationComplete?: () => void;
   myPlayerId?: string | null;
   activePlayerId?: string | null;
+  tileSwapAnimation?: TileSwapAnimation | null;
+  onSwapAnimationComplete?: () => void;
 }
 
 // Tile dimensions
@@ -42,7 +50,7 @@ const MOVE_SPEED = 350;
 // ms for the landing ring animation after token arrives
 const LANDING_DURATION = 800;
 
-export function GameBoard({ board, players, reachableTiles, onTileClick, moveAnimation, onAnimationComplete, myPlayerId, activePlayerId }: Props) {
+export function GameBoard({ board, players, reachableTiles, onTileClick, moveAnimation, onAnimationComplete, myPlayerId, activePlayerId, tileSwapAnimation, onSwapAnimationComplete }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
@@ -64,6 +72,18 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
   } | null>(null);
 
   const rafRef = useRef<number>(0);
+
+  // Stable ref for draw so animation loops don't restart when draw changes
+  const drawRef = useRef<() => void>(() => {});
+
+  // Tile swap animation state
+  const swapAnimRef = useRef<{
+    sourceTileId: number;
+    targetTileId: number;
+    color: string;
+    startTime: number;
+  } | null>(null);
+  const swapRafRef = useRef<number>(0);
 
   const reachableSet = new Set(reachableTiles.map((r) => r.tileId));
 
@@ -217,31 +237,19 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
       ctx.fillStyle = innerColor;
       ctx.fill();
 
-      // Reachable: pronounced glow + animated border + outer ring
+      // Reachable: animated border + outer ring (no fill — opacity change is enough)
       if (isReachable) {
-        // Canvas shadow for the glow effect
-        ctx.shadowBlur = 16 + pulse * 16;
-        ctx.shadowColor = 'rgba(243, 156, 18, 0.9)';
-
         // Bold animated border
         _roundRect(ctx, rx, ry, TILE_W, TILE_H, TILE_CORNER);
         ctx.strokeStyle = `rgba(243, 156, 18, ${0.7 + pulse * 0.3})`;
         ctx.lineWidth = 4;
         ctx.stroke();
 
-        // Warm fill
-        _roundRect(ctx, rx, ry, TILE_W, TILE_H, TILE_CORNER);
-        ctx.fillStyle = `rgba(243, 156, 18, ${0.10 + pulse * 0.18})`;
-        ctx.fill();
-
         // Outer pulsing ring
         _roundRect(ctx, rx - 5, ry - 5, TILE_W + 10, TILE_H + 10, TILE_CORNER + 5);
         ctx.strokeStyle = `rgba(243, 156, 18, ${pulse * 0.55})`;
         ctx.lineWidth = 2;
         ctx.stroke();
-
-        ctx.shadowBlur = 0;
-        ctx.shadowColor = 'transparent';
       }
 
       // Fork tile indicator: dashed outline
@@ -350,8 +358,55 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
       }
     }
 
+    // Draw tile swap animation
+    const swapAnim = swapAnimRef.current;
+    if (swapAnim) {
+      const SWAP_DURATION = 1200;
+      const elapsed = performance.now() - swapAnim.startTime;
+      const t = Math.min(elapsed / SWAP_DURATION, 1);
+
+      const swapRgb =
+        swapAnim.color === 'green' ? '39, 174, 96' :
+        swapAnim.color === 'red'   ? '231, 76, 60' :
+                                     '84, 110, 122';
+
+      const sourceTile = board.tiles[String(swapAnim.sourceTileId)];
+      const targetTile = board.tiles[String(swapAnim.targetTileId)];
+
+      // Phase 1 (0–0.45): circle rises from source tile and fades out
+      if (t < 0.45 && sourceTile) {
+        const p1 = t / 0.45;
+        const riseY = sourceTile.y - p1 * 30;
+        const alpha = (1 - p1) * 0.8;
+        ctx.beginPath();
+        ctx.arc(sourceTile.x, riseY, INNER_CIRCLE_R, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${swapRgb}, ${alpha})`;
+        ctx.fill();
+        ctx.strokeStyle = `rgba(${swapRgb}, ${alpha * 0.6})`;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+
+      // Phase 2 (0.55–1.0): circle fades in above target tile and settles
+      if (t > 0.55 && targetTile) {
+        const p2 = (t - 0.55) / 0.45;
+        const settleY = targetTile.y - 30 + p2 * 30;
+        const alpha = p2 * 0.8;
+        ctx.beginPath();
+        ctx.arc(targetTile.x, settleY, INNER_CIRCLE_R, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${swapRgb}, ${alpha})`;
+        ctx.fill();
+        ctx.strokeStyle = `rgba(${swapRgb}, ${alpha * 0.6})`;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+    }
+
     ctx.restore();
   }, [board, players, reachableSet, offset, scale, activePlayerId]);
+
+  // Keep drawRef current so animation loops use the latest draw without restarting
+  drawRef.current = draw;
 
   useEffect(() => {
     draw();
@@ -374,6 +429,7 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
   }, [draw, reachableTiles.length, activePlayerId]);
 
   // Move animation (includes landing ring phase before calling onAnimationComplete)
+  // Uses drawRef.current instead of draw to avoid restarting when draw changes.
   useEffect(() => {
     if (!moveAnimation || !board) return;
     const pathCoords = moveAnimation.path
@@ -400,10 +456,10 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
         const landing = landingRef.current;
         if (!landing) return;
         const landingElapsed = now - landing.startTime;
-        draw();
+        drawRef.current();
         if (landingElapsed >= LANDING_DURATION) {
           landingRef.current = null;
-          draw();
+          drawRef.current();
           // Re-centre on destination
           const lastTileId = moveAnimation.path[moveAnimation.path.length - 1];
           const destTile = board.tiles[String(lastTileId)];
@@ -433,7 +489,7 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
         if (currentHop < pathCoords.length - 1) Haptics.light();
       }
 
-      draw();
+      drawRef.current();
 
       if (elapsed >= totalDuration) {
         SFX.tileLand();
@@ -443,7 +499,7 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
         // Kick off landing ring
         const lastTileId = moveAnimation.path[moveAnimation.path.length - 1];
         landingRef.current = { tileId: lastTileId, startTime: now };
-        draw();
+        drawRef.current();
         rafRef.current = requestAnimationFrame(tick);
         return;
       }
@@ -458,7 +514,41 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
       animRef.current = null;
       landingRef.current = null;
     };
-  }, [moveAnimation, board, draw, onAnimationComplete, myPlayerId, activePlayerId, centerOnTile]);
+  }, [moveAnimation, board, onAnimationComplete, myPlayerId, activePlayerId, centerOnTile]);
+
+  // Tile swap animation
+  useEffect(() => {
+    if (!tileSwapAnimation || !board) return;
+    const SWAP_DURATION = 1200;
+
+    swapAnimRef.current = {
+      sourceTileId: tileSwapAnimation.sourceTileId,
+      targetTileId: tileSwapAnimation.targetTileId,
+      color: tileSwapAnimation.color,
+      startTime: performance.now(),
+    };
+
+    const tick = () => {
+      const anim = swapAnimRef.current;
+      if (!anim) return;
+      const elapsed = performance.now() - anim.startTime;
+      drawRef.current();
+      if (elapsed >= SWAP_DURATION) {
+        swapAnimRef.current = null;
+        drawRef.current();
+        onSwapAnimationComplete?.();
+      } else {
+        swapRafRef.current = requestAnimationFrame(tick);
+      }
+    };
+
+    swapRafRef.current = requestAnimationFrame(tick);
+
+    return () => {
+      if (swapRafRef.current) cancelAnimationFrame(swapRafRef.current);
+      swapAnimRef.current = null;
+    };
+  }, [tileSwapAnimation, board, onSwapAnimationComplete]);
 
   // Pan handlers
   const handlePointerDown = (e: React.PointerEvent) => {

@@ -8,7 +8,7 @@ import socketio
 
 from .game.state import session_manager, PlayerState
 from .game.passphrase import generate_passphrase
-from .game.effects import process_tile_effect, apply_choice_effect
+from .game.effects import process_tile_effect, apply_choice_effect, swap_tile_effect
 from .game.battle import check_for_battle
 from .game.minigames.base import (
     select_random_minigame,
@@ -382,7 +382,7 @@ async def choose_move(sid, data):
         "path": path,
     }, room=session_id)
 
-    # Process tile effect
+    # Process tile effect (swap is deferred to end of turn)
     effect_result = process_tile_effect(session, player)
     await sio.emit("tile_effect", {
         "playerId": player_id,
@@ -394,7 +394,11 @@ async def choose_move(sid, data):
         "from": from_tile, "to": target_tile, "effect": effect_result.get("type"),
     })
 
-    # If effect requires a choice, wait for it
+    # Store pending swap tile for end-of-turn processing
+    session._pending_swap_tile_id = target_tile
+    session._pending_turn_player_id = player_id
+
+    # If effect requires a choice, wait for it (then turn_complete after choice)
     if effect_result.get("requiresChoice"):
         await sio.emit("awaiting_choice", {
             "playerId": player_id,
@@ -402,8 +406,7 @@ async def choose_move(sid, data):
         }, to=sid)
         return
 
-    # Check for battles
-    await _check_battle_and_end_turn(session, player)
+    # Don't advance turn yet — wait for client's turn_complete signal
 
 
 @sio.event
@@ -430,7 +433,37 @@ async def make_choice(sid, data):
         **result,
     }, room=session_id)
 
-    # Now check for battles
+    # Don't advance turn yet — wait for client's turn_complete signal
+
+
+@sio.event
+async def turn_complete(sid, data):
+    """Client signals that the turn's overlays are dismissed. Perform swap + advance."""
+    player_mapping = session_manager.sid_to_player.get(sid)
+    if not player_mapping:
+        return
+
+    session_id, player_id = player_mapping
+    session = session_manager.get_session(session_id)
+    if not session or session.state != "playing":
+        return
+
+    # Only the current turn player (or any client for that player) can complete
+    pending_player_id = getattr(session, "_pending_turn_player_id", None)
+    if not pending_player_id:
+        return  # No pending turn completion
+
+    player = session.players.get(pending_player_id)
+    if not player:
+        return
+
+    # Clear pending state
+    session._pending_turn_player_id = None
+
+    # Perform deferred tile swap and emit animation
+    await _perform_tile_swap(session, pending_player_id)
+
+    # Check for battles and end turn
     await _check_battle_and_end_turn(session, player)
 
 
@@ -485,6 +518,40 @@ async def submit_minigame_score(sid, data):
         # End turn
         _end_turn(session)
         await _send_turn_update(session)
+
+
+async def _perform_tile_swap(session, player_id):
+    """Perform the deferred tile swap and emit tile_swap animation event."""
+    swap_tile_id = getattr(session, "_pending_swap_tile_id", None)
+    if swap_tile_id is None or not session.board:
+        return
+
+    session._pending_swap_tile_id = None
+
+    tile = session.board.tiles.get(swap_tile_id)
+    if not tile:
+        return
+
+    # Remember the tile color before swap for animation
+    original_color = tile.color.value
+
+    board_updates = swap_tile_effect(session, swap_tile_id)
+    if not board_updates:
+        return
+
+    # Find the target tile (the one that changed to a non-neutral color)
+    target_tile_id = None
+    for update in board_updates:
+        if update["id"] != swap_tile_id and update["color"] != "neutral":
+            target_tile_id = update["id"]
+            break
+
+    await sio.emit("tile_swap", {
+        "sourceTileId": swap_tile_id,
+        "targetTileId": target_tile_id,
+        "color": original_color,
+        "boardUpdates": board_updates,
+    }, room=session.id)
 
 
 async def _check_battle_and_end_turn(session, player):
