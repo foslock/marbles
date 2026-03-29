@@ -27,7 +27,7 @@ def process_tile_effect(
         player.modifiers["protection"] -= 1
         result["blocked"] = True
         result["message"] = "Your protection shield blocked this negative effect!"
-        _swap_tile_effect(session, tile.id)
+        result["boardUpdates"] = _swap_tile_effect(session, tile.id)
         return result
 
     match tile.effect:
@@ -144,7 +144,7 @@ def process_tile_effect(
         result["message"] += f" +{new_marbles} marble(s) from points!"
 
     # Swap tile effect with another of the same type
-    _swap_tile_effect(session, tile.id)
+    result["boardUpdates"] = _swap_tile_effect(session, tile.id)
 
     return result
 
@@ -203,22 +203,25 @@ def _get_other_player_options(session: GameSession, player: PlayerState) -> list
     ]
 
 
-def _swap_tile_effect(session: GameSession, tile_id: int):
+def _swap_tile_effect(session: GameSession, tile_id: int) -> list[dict]:
     """Move a positive/negative tile's effect to a random unoccupied neutral tile.
 
     The original tile becomes neutral. The target neutral tile gets a randomly
     chosen effect from the same positive/negative group, keeping the board
     unpredictable while preserving the overall balance of tile types.
     Neutral fortune-cookie tiles are left untouched.
+
+    Returns a list of dicts describing each tile whose color/category/effect changed,
+    so callers can push the updates to connected clients.
     """
     if not session.board:
-        return
+        return []
 
     tile = session.board.tiles[tile_id]
 
     # Only relocate positive/negative tiles; neutral tiles stay as-is
     if tile.color == TileColor.NEUTRAL:
-        return
+        return []
 
     # Identify occupied tile IDs so we don't hide an effect under a player
     occupied_tiles = {p.current_tile for p in session.get_players()}
@@ -231,6 +234,8 @@ def _swap_tile_effect(session: GameSession, tile_id: int):
         and not t.is_revealed
         and t.id not in occupied_tiles
     ]
+
+    changed = []
 
     if neutral_targets:
         target = random.choice(neutral_targets)
@@ -254,6 +259,7 @@ def _swap_tile_effect(session: GameSession, tile_id: int):
         target.category = new_cat
         target.color = new_color
         target.effect = random.choice(new_effects)
+        changed.append({"id": target.id, "color": target.color.value, "category": target.category.value, "effect": target.effect})
 
     # Reset original tile to neutral regardless of whether a target was found.
     # If all neutral tiles were occupied, the effect simply disappears.
@@ -262,3 +268,6 @@ def _swap_tile_effect(session: GameSession, tile_id: int):
     tile.color = neutral_color
     tile.effect = random.choice(neutral_effects)
     tile.is_revealed = False
+    changed.append({"id": tile.id, "color": tile.color.value, "category": tile.category.value, "effect": tile.effect})
+
+    return changed
