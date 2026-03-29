@@ -15,7 +15,7 @@ Marbles are earned by landing on positive tiles, winning battles, placing well i
 1. One player creates a game and sets the target marble count (default 10).
 2. The server generates a unique **two-word passphrase** (e.g. `wobbly-penguin`).
 3. Other players join by entering that passphrase.
-4. **2–8 players** can participate. Additional people may join as **spectators** at any time (including mid-game).
+4. **2–10 players** can participate. Up to **10 spectators** may also join at any time (including mid-game).
 
 ### Lobby & Token Assignment
 

@@ -75,7 +75,7 @@ export function LobbyScreen({ lobby, playerId, onStartGame, onAddCpu }: Props) {
 
       <div style={styles.section}>
         <h3 style={styles.sectionTitle}>
-          Players ({players.length}/8)
+          Players ({players.length}/10)
         </h3>
         <div style={styles.playerList}>
           {players.map((p) => (
@@ -142,7 +142,7 @@ export function LobbyScreen({ lobby, playerId, onStartGame, onAddCpu }: Props) {
 
       {isHost && (
         <div style={styles.hostActions}>
-          {players.length < 8 && (
+          {players.length < 10 && (
             <button style={styles.cpuButton} onClick={onAddCpu}>
               + Add CPU Player
             </button>
