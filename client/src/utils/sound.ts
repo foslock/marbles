@@ -198,4 +198,103 @@ export const SFX = {
     setTimeout(() => playTone(400, 0.15, 'sine', 0.2), 100);
     setTimeout(() => playTone(300, 0.25, 'sine', 0.15), 200);
   },
+
+  // ── Minigame-specific sounds ──────────────────────────────────────────────
+
+  /** Quick tap click; slight random pitch so rapid taps feel distinct. */
+  minigameTap() {
+    playTone(700 + Math.random() * 300, 0.05, 'square', 0.13);
+  },
+
+  /** Satisfying bubble-pop for TargetPop. */
+  minigamePop() {
+    playNoise(0.04, 0.08);
+    playTone(1100, 0.04, 'sine', 0.18);
+    setTimeout(() => playTone(1400, 0.06, 'sine', 0.12), 18);
+  },
+
+  /** Block landing thud for TowerBuilder.
+   *  quality 0=edge, 1=ok, 2=good, 3=perfect */
+  minigameLand(quality: 0 | 1 | 2 | 3) {
+    const freq = [130, 160, 200, 260][quality];
+    const vol  = [0.18, 0.22, 0.28, 0.35][quality];
+    playTone(freq, 0.14, 'triangle', vol);
+    if (quality >= 2) {
+      // Sweet overtone on good/perfect placements
+      setTimeout(() => playTone(freq * 2, 0.1, 'sine', vol * 0.55), 55);
+    }
+  },
+
+  /** Descending crash for TowerBuilder miss / game over. */
+  minigameFall() {
+    playNoise(0.08, 0.12);
+    playTone(300, 0.1, 'sawtooth', 0.22);
+    setTimeout(() => playTone(200, 0.14, 'sawtooth', 0.18), 90);
+    setTimeout(() => playTone(120, 0.3,  'sawtooth', 0.14), 200);
+  },
+
+  /** Swoosh for SwipeDodge lane change. */
+  minigameDodge() {
+    const ctx = getCtx();
+    const osc  = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = 900;
+    osc.frequency.linearRampToValueAtTime(400, ctx.currentTime + 0.08);
+    gain.gain.value = 0.12;
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.1);
+  },
+
+  /** Crunch/impact for SwipeDodge hit. */
+  minigameHit() {
+    playNoise(0.1, 0.18);
+    playTone(160, 0.12, 'sawtooth', 0.2);
+  },
+
+  /** Distinct Simon-style tone per tile index for MemoryFlash.
+   *  Uses a pentatonic set so any sequence sounds musical. */
+  minigameTileFlash(colorIdx: number) {
+    // B3, E4, A4, D5
+    const freqs = [247, 330, 440, 587];
+    playTone(freqs[colorIdx % 4] ?? 440, 0.32, 'sine', 0.3, true);
+  },
+
+  /** "GO!" alert tone for ReactionSnap turning green. */
+  minigameReactionGo() {
+    playTone(880,  0.06, 'square', 0.16);
+    setTimeout(() => playTone(1100, 0.1, 'square', 0.2), 45);
+  },
+
+  /** Reaction result — pitch encodes speed: fast = high, slow = low. */
+  minigameReactionTap(ms: number) {
+    const freq = Math.max(300, Math.min(1500, 1500 - ms));
+    playTone(freq, 0.15, 'triangle', 0.25);
+  },
+
+  /** Soft tick while on-target (BallTracker, TiltChase). */
+  minigameOnTarget() {
+    playTone(660, 0.06, 'sine', 0.1);
+  },
+
+  /** SizeMatch oval matched within threshold. */
+  minigameMatchSuccess() {
+    playTone(880,  0.07, 'sine', 0.22);
+    setTimeout(() => playTone(1100, 0.07, 'sine', 0.18), 60);
+    setTimeout(() => playTone(1320, 0.14, 'sine', 0.22), 120);
+  },
+
+  /** Soft brush noise for CanvasFill (call throttled externally). */
+  minigameBrush() {
+    playNoise(0.05, 0.04);
+  },
+
+  /** ColorSort correct sort chime. */
+  minigameCorrectSort() {
+    playTone(660, 0.08, 'triangle', 0.2);
+    setTimeout(() => playTone(880, 0.1, 'triangle', 0.18), 60);
+  },
 };

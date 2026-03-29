@@ -46,6 +46,21 @@ export function RhythmPulse({ onScoreUpdate, config }: MinigameComponentProps) {
     const delta = Math.abs(Date.now() - lastFlash.current);
     const beatInterval = (60 / bpm) * 1000;
     const accuracy = Math.max(0, 100 - (delta / beatInterval) * 200);
+    // Pitch reflects timing accuracy: close = high, off = low
+    const freq = 400 + Math.round(accuracy * 7);
+    try {
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.value = freq;
+      gain.gain.value = 0.22;
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.08);
+    } catch { /* silent fallback */ }
     scoreRef.current += Math.round(accuracy);
     onScoreUpdate(scoreRef.current);
   };

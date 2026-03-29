@@ -1,9 +1,11 @@
 import { useCallback, useRef } from 'react';
 import type { MinigameComponentProps } from './types';
+import { SFX } from '../../utils/sound';
 
 export function CanvasFill({ onScoreUpdate }: MinigameComponentProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const filledPixels = useRef(0);
+  const lastSoundStroke = useRef(0);
 
   const handleDraw = useCallback(
     (e: React.PointerEvent) => {
@@ -23,6 +25,10 @@ export function CanvasFill({ onScoreUpdate }: MinigameComponentProps) {
 
       filledPixels.current += 1;
       onScoreUpdate(filledPixels.current);
+      if (filledPixels.current - lastSoundStroke.current >= 10) {
+        lastSoundStroke.current = filledPixels.current;
+        SFX.minigameBrush();
+      }
     },
     [onScoreUpdate]
   );

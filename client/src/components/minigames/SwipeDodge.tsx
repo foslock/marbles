@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { MinigameComponentProps } from './types';
+import { SFX } from '../../utils/sound';
 
 interface Obstacle {
   id: number;
@@ -34,6 +35,7 @@ export function SwipeDodge({ onScoreUpdate }: MinigameComponentProps) {
 
   const moveTo = useCallback((lane: number) => {
     const l = Math.max(0, Math.min(LANES - 1, lane));
+    if (l !== playerLaneRef.current) SFX.minigameDodge();
     playerLaneRef.current = l;
     setPlayerLane(l);
   }, []);
@@ -69,6 +71,7 @@ export function SwipeDodge({ onScoreUpdate }: MinigameComponentProps) {
         if (!frozenRef.current) {
           for (const o of moved) {
             if (o.lane === playerLaneRef.current && Math.abs(o.y - PLAYER_Y) < HIT_WINDOW) {
+              SFX.minigameHit();
               frozenRef.current = true;
               setTimeout(() => { frozenRef.current = false; }, 600);
               return moved.filter((ob) => ob !== o && ob.y < H + 10);

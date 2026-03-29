@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { MinigameComponentProps } from './types';
+import { SFX } from '../../utils/sound';
 
 interface OvalTarget { rx: number; ry: number; }
 
@@ -89,6 +90,7 @@ export function SizeMatch({ onScoreUpdate, config }: MinigameComponentProps) {
       const diff = Math.abs(playerScaleRef.current - 1.0);
       if (diff <= MATCH_THRESHOLD) {
         // Matched!
+        SFX.minigameMatchSuccess();
         setMatched(true);
         scoreRef.current += 1;
         setScore(scoreRef.current);

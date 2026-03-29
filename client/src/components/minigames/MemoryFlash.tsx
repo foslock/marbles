@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { MinigameComponentProps } from './types';
+import { SFX } from '../../utils/sound';
 
 const COLORS = ['#e74c3c', '#3498db', '#2ecc71', '#f39c12'];
 const COLOR_NAMES = ['Red', 'Blue', 'Green', 'Yellow'];
@@ -28,7 +29,9 @@ export function MemoryFlash({ onScoreUpdate, config }: MinigameComponentProps) {
       setInputIndex(0);
       return;
     }
-    setActiveColor(sequence.current[showIndex]);
+    const colorIdx = sequence.current[showIndex];
+    SFX.minigameTileFlash(colorIdx);
+    setActiveColor(colorIdx);
     const flashTimer = setTimeout(() => {
       setActiveColor(null);
       const gapTimer = setTimeout(() => setShowIndex((i) => i + 1), GAP_DURATION);
@@ -41,6 +44,7 @@ export function MemoryFlash({ onScoreUpdate, config }: MinigameComponentProps) {
     if (phase !== 'input') return;
 
     if (colorIndex === sequence.current[inputIndex]) {
+      SFX.minigameTileFlash(colorIndex);
       const nextInput = inputIndex + 1;
       setInputIndex(nextInput);
       if (nextInput >= revealCount) {
@@ -54,6 +58,7 @@ export function MemoryFlash({ onScoreUpdate, config }: MinigameComponentProps) {
     } else {
       // Wrong: flash all tiles red once, then immediately back to input
       // (player must recall from memory — no replay)
+      SFX.error();
       setPhase('error');
       setTimeout(() => {
         setPhase('input');

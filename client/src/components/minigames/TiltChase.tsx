@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { MinigameComponentProps } from './types';
 import { lobbyMotionGranted } from '../LobbyScreen';
+import { SFX } from '../../utils/sound';
 
 /**
  * TiltChase: Guide your dot to follow a moving target using device accelerometer.
@@ -98,6 +99,7 @@ export function TiltChase({ onScoreUpdate, config }: MinigameComponentProps) {
       if (dist < 65) {
         scoreRef.current += dist < 25 ? 3 : 1;
         onScoreUpdate(scoreRef.current);
+        SFX.minigameOnTarget();
       }
     }, 100);
     return () => clearInterval(interval);
