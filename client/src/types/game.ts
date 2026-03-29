@@ -115,6 +115,7 @@ export interface MinigameInfo {
     instructions: string;
     duration: number;
     type: string;
+    config?: Record<string, unknown>;
   };
   participants: string[];
   message: string;

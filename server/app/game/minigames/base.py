@@ -1,4 +1,18 @@
-"""Minigame definitions and framework."""
+"""Minigame definitions and framework.
+
+ARCHITECTURE NOTE — Client-side scoring:
+All minigame interactions and scoring run entirely in the browser.
+The server's role is limited to:
+  1. Selecting which minigame to play and sending its definition + config
+  2. Collecting final scores from each client after the timer expires
+  3. Computing rankings and distributing prizes
+
+During gameplay there are ZERO server round-trips. This means:
+  - Minigames must be fully deterministic given the config sent at start
+  - All timing, hit detection, and score calculation happen on-device
+  - The `config` dict on each minigame can carry shared seeds/params so
+    all players get identical conditions (e.g. same BPM, same target positions)
+"""
 
 import random
 from dataclasses import dataclass
@@ -9,6 +23,33 @@ class MinigameResult:
     scores: dict[str, int]  # player_id -> score
     rankings: list[dict]  # [{id, name, score, rank, prize}]
     marble_bonus: bool  # True if winners get marbles instead of points
+
+
+def _make_config(minigame_type: str) -> dict:
+    """Generate shared config/seed for a minigame so all players get identical conditions."""
+    match minigame_type:
+        case "rhythm":
+            return {"bpm": random.randint(80, 160)}
+        case "tracking":
+            return {"seed": random.randint(0, 999999)}
+        case "target_tap":
+            return {"seed": random.randint(0, 999999)}
+        case "reaction":
+            # Shared delay sequence so all players react to the same timings
+            delays = [random.randint(800, 2500) for _ in range(6)]
+            return {"delays": delays}
+        case "accelerometer":
+            return {"seed": random.randint(0, 999999)}
+        case "size_match":
+            sizes = [random.randint(40, 200) for _ in range(5)]
+            return {"targetSizes": sizes}
+        case "memory":
+            sequence = [random.randint(0, 3) for _ in range(12)]
+            return {"sequence": sequence}
+        case "dodge":
+            return {"seed": random.randint(0, 999999)}
+        case _:
+            return {}
 
 
 MINIGAMES = [
@@ -96,8 +137,10 @@ MINIGAMES = [
 
 
 def select_random_minigame() -> dict:
-    """Select a random minigame."""
-    return random.choice(MINIGAMES)
+    """Select a random minigame and attach generated config for client-side use."""
+    minigame = {**random.choice(MINIGAMES)}
+    minigame["config"] = _make_config(minigame["type"])
+    return minigame
 
 
 def calculate_rankings(
