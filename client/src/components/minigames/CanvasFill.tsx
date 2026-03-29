@@ -4,34 +4,75 @@ import { SFX } from '../../utils/sound';
 
 export function CanvasFill({ onScoreUpdate }: MinigameComponentProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const filledPixels = useRef(0);
-  const lastSoundStroke = useRef(0);
+  const lastPos = useRef<{ x: number; y: number } | null>(null);
+  const totalDist = useRef(0);
+  const lastSoundDist = useRef(0);
 
-  const handleDraw = useCallback(
+  const getPos = (e: React.PointerEvent) => {
+    const rect = canvasRef.current!.getBoundingClientRect();
+    // Scale from CSS pixels to canvas pixels
+    const scaleX = canvasRef.current!.width / rect.width;
+    const scaleY = canvasRef.current!.height / rect.height;
+    return {
+      x: (e.clientX - rect.left) * scaleX,
+      y: (e.clientY - rect.top) * scaleY,
+    };
+  };
+
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const pos = getPos(e);
+    lastPos.current = pos;
+    // Draw a dot at the touch point so single taps register
+    ctx.lineWidth = 12;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = `hsl(${(totalDist.current * 0.6) % 360}, 85%, 62%)`;
+    ctx.beginPath();
+    ctx.moveTo(pos.x, pos.y);
+    ctx.lineTo(pos.x + 0.1, pos.y);
+    ctx.stroke();
+  }, []);
+
+  const handlePointerMove = useCallback(
     (e: React.PointerEvent) => {
+      if (!lastPos.current) return;
       const canvas = canvasRef.current;
       if (!canvas) return;
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
 
-      const rect = canvas.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
+      const pos = getPos(e);
+      const segLen = Math.hypot(pos.x - lastPos.current.x, pos.y - lastPos.current.y);
 
+      ctx.lineWidth = 12;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.strokeStyle = `hsl(${(totalDist.current * 0.6) % 360}, 85%, 62%)`;
       ctx.beginPath();
-      ctx.arc(x, y, 20, 0, Math.PI * 2);
-      ctx.fillStyle = `hsl(${(filledPixels.current * 3) % 360}, 80%, 60%)`;
-      ctx.fill();
+      ctx.moveTo(lastPos.current.x, lastPos.current.y);
+      ctx.lineTo(pos.x, pos.y);
+      ctx.stroke();
 
-      filledPixels.current += 1;
-      onScoreUpdate(filledPixels.current);
-      if (filledPixels.current - lastSoundStroke.current >= 10) {
-        lastSoundStroke.current = filledPixels.current;
+      lastPos.current = pos;
+      totalDist.current += segLen;
+      // Score = distance drawn / 5 (keeps numbers reasonable)
+      onScoreUpdate(Math.floor(totalDist.current / 5));
+
+      if (totalDist.current - lastSoundDist.current >= 80) {
+        lastSoundDist.current = totalDist.current;
         SFX.minigameBrush();
       }
     },
-    [onScoreUpdate]
+    [onScoreUpdate],
   );
+
+  const endStroke = useCallback(() => {
+    lastPos.current = null;
+  }, []);
 
   return (
     <canvas
@@ -39,7 +80,11 @@ export function CanvasFill({ onScoreUpdate }: MinigameComponentProps) {
       width={300}
       height={400}
       style={styles.canvas}
-      onPointerMove={handleDraw}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={endStroke}
+      onPointerLeave={endStroke}
+      onPointerCancel={endStroke}
     />
   );
 }
