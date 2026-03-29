@@ -382,6 +382,33 @@ async def choose_move(sid, data):
         "path": path,
     }, room=session_id)
 
+    # Check if another player is already on this tile — if so, skip tile
+    # effect entirely and go straight to minigame.
+    battle = check_for_battle(session, player)
+    if battle:
+        # No tile effect, no swap — just emit a neutral "battle" tile_effect
+        # so the client knows the move resolved, then start the minigame.
+        await sio.emit("tile_effect", {
+            "playerId": player_id,
+            "playerName": player.name,
+            "type": "battle",
+            "category": "neutral",
+            "color": "neutral",
+            "message": battle["message"],
+        }, room=session_id)
+
+        await _persist_event(session_id, session.turn_number, "move", player_id, {
+            "from": from_tile, "to": target_tile, "effect": "battle",
+        })
+
+        # Store pending state — after the tile effect overlay is dismissed,
+        # the battle/minigame will start via turn_complete.
+        session._pending_swap_tile_id = None  # no swap for battles
+        session._pending_turn_player_id = player_id
+        session._pending_turn_action = "battle"
+        session._pending_battle = battle
+        return
+
     # Process tile effect (swap is deferred to end of turn)
     effect_result = process_tile_effect(session, player)
     await sio.emit("tile_effect", {
@@ -397,7 +424,7 @@ async def choose_move(sid, data):
     # Store pending swap tile for end-of-turn processing
     session._pending_swap_tile_id = target_tile
     session._pending_turn_player_id = player_id
-    session._pending_turn_action = "swap_and_check"
+    session._pending_turn_action = "swap"
 
     # If effect requires a choice, wait for it (then turn_complete after choice)
     if effect_result.get("requiresChoice"):
@@ -463,15 +490,25 @@ async def turn_complete(sid, data):
     session._pending_turn_player_id = None
     session._pending_turn_action = None
 
-    if action == "swap_and_check":
-        # After tile effect dismissed: perform swap, then check for battle
+    if action == "swap":
+        # After tile effect dismissed: perform swap, then end turn
+        # (no battle check needed — choose_move already confirmed no collision)
         await _perform_tile_swap(session, pending_player_id)
-        await _check_battle_and_end_turn(session, player)
+        await _end_and_send(session)
+    elif action == "battle":
+        # After battle notification dismissed: start the minigame directly
+        pending_battle = getattr(session, "_pending_battle", None)
+        session._pending_battle = None
+        if pending_battle:
+            await _start_minigame(session, pending_battle)
+        else:
+            # Fallback: no battle data, just advance
+            _end_turn(session)
+            await _send_turn_update(session)
+            await _persist_session(session)
     elif action == "advance":
         # After minigame results dismissed: just advance the turn
-        _end_turn(session)
-        await _send_turn_update(session)
-        await _persist_session(session)
+        await _end_and_send(session)
 
 
 @sio.event
@@ -561,62 +598,71 @@ async def _perform_tile_swap(session, player_id):
     }, room=session.id)
 
 
-async def _check_battle_and_end_turn(session, player):
-    """Check for tile collisions triggering a minigame, then end turn."""
-    battle = check_for_battle(session, player)
+async def _start_minigame(session, battle):
+    """Start a minigame from a battle. Handles CPU auto-scoring and all-CPU resolution."""
+    minigame = select_random_minigame()
+    bonus = battle.get("bonus", False)
+    session._minigame_participants = battle["participants"]
+    session._minigame_scores = {}
+    session._minigame_bonus = bonus
 
-    if battle:
-        minigame = select_random_minigame()
-        bonus = battle.get("bonus", False)
-        session._minigame_participants = battle["participants"]
-        session._minigame_scores = {}
-        session._minigame_bonus = bonus
+    await sio.emit("minigame_start", {
+        "minigame": minigame,
+        "participants": battle["participants"],
+        "message": battle["message"],
+        "bonus": bonus,
+    }, room=session.id)
 
-        await sio.emit("minigame_start", {
-            "minigame": minigame,
-            "participants": battle["participants"],
-            "message": battle["message"],
+    # Auto-submit scores for any CPU participants immediately
+    for pid in battle["participants"]:
+        p = session.players.get(pid)
+        if p and p.is_cpu:
+            session._minigame_scores[pid] = cpu_minigame_score(minigame["type"])
+
+    # If all participants are CPU, resolve immediately
+    if set(session._minigame_scores.keys()) >= set(session._minigame_participants):
+        player_names = {pid: session.players[pid].name for pid in session._minigame_scores}
+        result = calculate_rankings(session._minigame_scores, player_names, bonus=bonus)
+        apply_minigame_prizes(session, result)
+        await sio.emit("minigame_results", {
+            "rankings": result.rankings,
+            "marbleBonus": result.marble_bonus,
             "bonus": bonus,
         }, room=session.id)
+        session._minigame_scores = {}
+        session._minigame_participants = []
+        session._minigame_bonus = False
 
-        # Auto-submit scores for any CPU participants immediately
-        for pid in battle["participants"]:
-            p = session.players.get(pid)
-            if p and p.is_cpu:
-                session._minigame_scores[pid] = cpu_minigame_score(minigame["type"])
+        # Check if any human players are in the session to dismiss results
+        has_human = any(
+            not p.is_cpu and p.role == "player"
+            for p in session.players.values()
+        )
+        if has_human:
+            session._pending_turn_player_id = session.current_turn_player_id
+            session._pending_turn_action = "advance"
+        else:
+            await asyncio.sleep(3.0)
+            _end_turn(session)
+            await _send_turn_update(session)
 
-        # If all participants are CPU, resolve immediately
-        if set(session._minigame_scores.keys()) >= set(session._minigame_participants):
-            player_names = {pid: session.players[pid].name for pid in session._minigame_scores}
-            result = calculate_rankings(session._minigame_scores, player_names, bonus=bonus)
-            apply_minigame_prizes(session, result)
-            await sio.emit("minigame_results", {
-                "rankings": result.rankings,
-                "marbleBonus": result.marble_bonus,
-                "bonus": bonus,
-            }, room=session.id)
-            session._minigame_scores = {}
-            session._minigame_participants = []
-            session._minigame_bonus = False
 
-            # Check if any human players are in the session to dismiss results
-            has_human = any(
-                not p.is_cpu and p.role == "player"
-                for p in session.players.values()
-            )
-            if has_human:
-                # Wait for a human client to dismiss the results overlay
-                session._pending_turn_player_id = session.current_turn_player_id
-                session._pending_turn_action = "advance"
-            else:
-                # All-CPU game: auto-advance after a delay
-                await asyncio.sleep(3.0)
-                _end_turn(session)
-                await _send_turn_update(session)
+async def _check_battle_and_end_turn(session, player):
+    """Check for tile collisions triggering a minigame, then end turn.
 
-        return  # Turn ends after minigame completes
+    Used by CPU turns where the battle check hasn't been done yet.
+    Human turns pre-check for battles in choose_move.
+    """
+    battle = check_for_battle(session, player)
+    if battle:
+        await _start_minigame(session, battle)
+        return
 
-    # Check for winner
+    await _end_and_send(session)
+
+
+async def _end_and_send(session):
+    """Check for winner, then advance turn and notify clients."""
     winner = session.check_winner()
     if winner:
         await sio.emit("game_over", {
@@ -624,16 +670,11 @@ async def _check_battle_and_end_turn(session, player):
             "winnerName": winner.name,
             "players": session.to_game_dict()["players"],
         }, room=session.id)
-
         await _persist_event(session.id, session.turn_number, "game_over", winner.id, {})
         await _persist_session(session)
         return
-
-    # Advance turn
     _end_turn(session)
     await _send_turn_update(session)
-
-    # Persist at end of every turn
     await _persist_session(session)
 
 
