@@ -311,4 +311,30 @@ export const SFX = {
     playTone(400, 0.1, 'triangle', 0.2);
     setTimeout(() => playTone(300, 0.14, 'sine', 0.14), 45);
   },
+
+  /** Floor pump compression — low piston thump + bandpass air rush. */
+  minigamePump() {
+    playTone(115, 0.1, 'triangle', 0.28);
+    const ctx = getCtx();
+    const dur = 0.16;
+    const n = Math.floor(ctx.sampleRate * dur);
+    const buf = ctx.createBuffer(1, n, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) {
+      const t = i / n;
+      d[i] = (Math.random() * 2 - 1) * Math.sin(t * Math.PI) * 0.65;
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 650;
+    bp.Q.value = 1.6;
+    const g = ctx.createGain();
+    g.gain.value = 0.26;
+    src.connect(bp);
+    bp.connect(g);
+    g.connect(ctx.destination);
+    src.start();
+  },
 };

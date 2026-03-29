@@ -164,6 +164,14 @@ MINIGAMES = [
         "type": "marble_runner",
     },
     {
+        "id": "pump_it",
+        "name": "Pump It",
+        "description": "Inflate the balloon as much as possible!",
+        "instructions": "Drag the pump handle DOWN to push air into the balloon, then release to reset it. The balloon slowly deflates on its own — keep pumping to hold it full! Your score is how inflated the balloon is when time runs out.",
+        "duration": 12000,
+        "type": "pump_it",
+    },
+    {
         "id": "light_switch",
         "name": "Light Switch",
         "description": "Flick the switch as fast as you can!",
