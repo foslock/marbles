@@ -12,12 +12,15 @@ const PLAYTEST_MINIGAMES = [
   { id: 'canvas_fill', name: 'Color Rush', instructions: 'Draw with your finger to fill as much of the canvas as possible.', duration: 5000, type: 'canvas_fill' },
   { id: 'tilt_chase', name: 'Tilt Chase', instructions: 'Tilt your device to guide your dot to follow the target dot.', duration: 7000, type: 'accelerometer' },
   { id: 'reaction_snap', name: 'Reaction Snap', instructions: 'Wait for the screen to turn green, then tap as fast as possible. Fastest reaction wins!', duration: 5000, type: 'reaction' },
-  { id: 'size_judge', name: 'Size Matters', instructions: 'A circle appears — pinch/spread to match its size exactly. Closest match wins!', duration: 6000, type: 'size_match' },
-  { id: 'memory_flash', name: 'Memory Flash', instructions: 'Colored tiles flash in a sequence. Repeat the sequence from memory. Longest correct streak wins!', duration: 8000, type: 'memory' },
-  { id: 'swipe_dodge', name: 'Swipe Dodge', instructions: 'Swipe left/right to dodge falling obstacles. Survive the longest to win!', duration: 6000, type: 'dodge' },
+  { id: 'size_judge', name: 'Size Matters', instructions: 'A circle appears — drag or pinch to match its size exactly. Closest match wins!', duration: 6000, type: 'size_match' },
+  { id: 'memory_flash', name: 'Memory Flash', instructions: 'Colored tiles flash in a sequence. Repeat the sequence from memory. Longest correct streak wins!', duration: 12000, type: 'memory' },
+  { id: 'swipe_dodge', name: 'Swipe Dodge', instructions: 'Swipe left/right to dodge falling obstacles. Dodge as many as possible!', duration: 20000, type: 'dodge' },
   { id: 'target_pop', name: 'Target Pop', instructions: 'Targets appear randomly on screen. Tap them before they disappear. Most pops wins!', duration: 5000, type: 'target_tap' },
-  { id: 'marble_stack', name: 'Marble Stack', instructions: 'A marble swings back and forth. Tap when it\'s centred to drop it on the stack. Closer to centre = more points!', duration: 20000, type: 'marble_stack' },
+  { id: 'tower_builder', name: 'Tower Builder', instructions: 'A block slides back and forth. Tap to drop it — overlap with the block below is kept. Stack as high as possible!', duration: 90000, type: 'tower_builder' },
   { id: 'color_sort', name: 'Color Sort', instructions: 'A marble falls from the top. Tap the matching coloured bucket before it hits the ground!', duration: 18000, type: 'color_sort' },
+  { id: 'marble_runner', name: 'Marble Runner', instructions: 'Your marble rolls forward automatically. Swipe up to jump over ground spikes, swipe down to duck under ceiling bars!', duration: 30000, type: 'marble_runner' },
+  { id: 'light_switch', name: 'Light Switch', instructions: 'Swipe up to turn the light ON, swipe down to turn it OFF. Flick as many times as possible!', duration: 7000, type: 'light_switch' },
+  { id: 'pump_it', name: 'Pump It', instructions: 'Drag the pump handle down to inflate the balloon. It slowly deflates — keep pumping to hold it full!', duration: 12000, type: 'pump_it' },
 ];
 
 function makePlaytestConfig(type: string): Record<string, unknown> {
@@ -29,10 +32,11 @@ function makePlaytestConfig(type: string): Record<string, unknown> {
     case 'reaction': return { delays: Array.from({ length: 6 }, () => rand(800, 2500)) };
     case 'accelerometer': return { seed: rand(0, 999999) };
     case 'size_match': return { targetSizes: Array.from({ length: 5 }, () => rand(40, 200)) };
-    case 'memory': return { sequence: Array.from({ length: 12 }, () => rand(0, 3)) };
+    case 'memory': return { sequence: Array.from({ length: 16 }, () => rand(0, 3)) };
     case 'dodge': return { seed: rand(0, 999999) };
-    case 'marble_stack': return { seed: rand(0, 999999) };
+    case 'tower_builder': return { seed: rand(0, 999999) };
     case 'color_sort': return { seed: rand(0, 999999) };
+    case 'marble_runner': return { seed: rand(0, 999999) };
     default: return {};
   }
 }
