@@ -91,10 +91,10 @@ export function GameScreen({
   );
 
   useEffect(() => {
-    if (!effectToShow && !minigameResults) {
+    if (!effectToShow && !tileEffect && !minigameResults) {
       setDisplayedTurnPlayerId(gameState.currentTurnPlayerId);
     }
-  }, [gameState.currentTurnPlayerId, effectToShow, minigameResults]);
+  }, [gameState.currentTurnPlayerId, effectToShow, tileEffect, minigameResults]);
 
   // ── Derived values ───────────────────────────────────────────────────────
   const myPlayer = playerId ? gameState.players[playerId] : null;
