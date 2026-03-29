@@ -32,7 +32,7 @@ _CPU_SCORES: dict[str, tuple[int, int]] = {
     "tower_builder": (12000, 25000),# TowerBuilder: cumulative block area
     "color_drop":    (300, 550),    # ColorDrop: +10 per catch, up to 800
     "marble_runner": (1500, 4000),  # MarbleRunner: distance / 10
-    "pump_it":       (60, 130),     # PumpIt: air pressure 0-200
+    "pump_it":       (60, 150),     # PumpIt: air pressure (no cap, leak rate limits)
     "light_switch":  (8, 18),       # LightSwitch: correct toggles in 7 s
 }
 
