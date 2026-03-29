@@ -8,6 +8,16 @@ from ..board.generator import FORTUNE_COOKIES, TileCategory, TileColor, TILE_EFF
 POINTS_PER_MARBLE = 100
 
 
+def check_marble_conversion(player: PlayerState) -> int:
+    """Convert every full 100 points into a marble. Returns number of new marbles."""
+    if player.points < POINTS_PER_MARBLE:
+        return 0
+    new_marbles = player.points // POINTS_PER_MARBLE
+    player.marbles += new_marbles
+    player.points %= POINTS_PER_MARBLE
+    return new_marbles
+
+
 def process_tile_effect(
     session: GameSession, player: PlayerState
 ) -> dict:
@@ -33,17 +43,17 @@ def process_tile_effect(
         # === POSITIVE EFFECTS ===
         case "gain_10_points":
             player.points += 10
-            result["message"] = f"Gained 10 points! (10% of a marble)"
+            result["message"] = "Gained 10 points!"
             result["pointsGained"] = 10
 
         case "gain_25_points":
             player.points += 25
-            result["message"] = f"Gained 25 points! (25% of a marble)"
+            result["message"] = "Gained 25 points!"
             result["pointsGained"] = 25
 
         case "gain_50_points":
             player.points += 50
-            result["message"] = f"Gained 50 points! (Half a marble!)"
+            result["message"] = "Gained 50 points!"
             result["pointsGained"] = 50
 
         case "reroll":
@@ -135,12 +145,9 @@ def process_tile_effect(
             result["message"] = "Nothing happened. The tile stares at you blankly."
 
     # Convert excess points to marbles
-    if player.points >= POINTS_PER_MARBLE:
-        new_marbles = player.points // POINTS_PER_MARBLE
-        player.marbles += new_marbles
-        player.points %= POINTS_PER_MARBLE
+    new_marbles = check_marble_conversion(player)
+    if new_marbles:
         result["autoMarbles"] = new_marbles
-        result["message"] += f" +{new_marbles} marble(s) from points!"
 
     return result
 
@@ -187,6 +194,14 @@ def apply_choice_effect(
                 result["message"] = f"Gave a marble to {target.name}."
             else:
                 result["message"] = "You have no marbles to give!"
+
+    # Check marble conversion for both players after point transfers
+    player_new = check_marble_conversion(player)
+    target_new = check_marble_conversion(target)
+    if player_new:
+        result["autoMarbles"] = player_new
+    if target_new:
+        result["targetAutoMarbles"] = target_new
 
     return result
 

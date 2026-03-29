@@ -42,6 +42,23 @@ export function useSocket() {
     amount?: number;
   } | null>(null);
 
+  // Buffered board updates — applied after swap animation completes
+  const pendingBoardUpdatesRef = useRef<{ id: number; color: 'green' | 'red' | 'neutral'; category: string; effect: string }[]>([]);
+
+  const _applyBoardUpdates = useCallback((updates: { id: number; color: 'green' | 'red' | 'neutral'; category: string; effect: string }[]) => {
+    setGameState((prev) => {
+      if (!prev?.board) return prev;
+      const tiles = { ...prev.board.tiles };
+      for (const update of updates) {
+        const key = String(update.id);
+        if (tiles[key]) {
+          tiles[key] = { ...tiles[key], color: update.color, category: update.category, effect: update.effect };
+        }
+      }
+      return { ...prev, board: { ...prev.board, tiles } };
+    });
+  }, []);
+
   useEffect(() => {
     const socket = io(SOCKET_URL, {
       transports: ['websocket', 'polling'],
@@ -150,19 +167,10 @@ export function useSocket() {
     });
 
     socket.on('tile_swap', (data: { sourceTileId: number; targetTileId: number | null; color: string; boardUpdates: { id: number; color: 'green' | 'red' | 'neutral'; category: string; effect: string }[] }) => {
-      // Apply board updates
+      // Buffer board updates — they'll be applied after the swap animation completes
+      // so the destination tile doesn't change color before the bubble arrives.
       if (data.boardUpdates && data.boardUpdates.length > 0) {
-        setGameState((prev) => {
-          if (!prev?.board) return prev;
-          const tiles = { ...prev.board.tiles };
-          for (const update of data.boardUpdates) {
-            const key = String(update.id);
-            if (tiles[key]) {
-              tiles[key] = { ...tiles[key], color: update.color, category: update.category, effect: update.effect };
-            }
-          }
-          return { ...prev, board: { ...prev.board, tiles } };
-        });
+        pendingBoardUpdatesRef.current = data.boardUpdates;
       }
       // Trigger swap animation if there's a target tile
       if (data.targetTileId != null) {
@@ -171,6 +179,9 @@ export function useSocket() {
           targetTileId: data.targetTileId,
           color: data.color,
         });
+      } else if (data.boardUpdates && data.boardUpdates.length > 0) {
+        // No animation needed — apply updates immediately
+        _applyBoardUpdates(data.boardUpdates);
       }
     });
 
@@ -185,6 +196,8 @@ export function useSocket() {
       targetName: string;
       message: string;
       amount?: number;
+      autoMarbles?: number;
+      targetAutoMarbles?: number;
     }) => {
       setAwaitingChoice(null);
       // Activity item + sound + animation for steal/give effects
@@ -195,10 +208,17 @@ export function useSocket() {
         Haptics.medium();
         const color: ActivityItem['color'] = isSteal ? 'red' : 'neutral';
         const now = Date.now();
-        setActivityFeed((prev) => [
-          ...prev,
+        const newItems: ActivityItem[] = [
           { id: `cr-${now}`, message: data.message, color, timestamp: now },
-        ]);
+        ];
+        if (data.autoMarbles) {
+          SFX.marbleGain();
+          newItems.push({ id: `cr-am-${now}`, message: `\uD83D\uDD2E +${data.autoMarbles} marble from points!`, color: 'gold', timestamp: now + 1 });
+        }
+        if (data.targetAutoMarbles) {
+          newItems.push({ id: `cr-tam-${now}`, message: `\uD83D\uDD2E ${data.targetName} +${data.targetAutoMarbles} marble from points!`, color: 'gold', timestamp: now + 2 });
+        }
+        setActivityFeed((prev) => [...prev, ...newItems]);
         // Trigger steal animation on the board
         if (isSteal) {
           setStealAnimation({
@@ -344,7 +364,14 @@ export function useSocket() {
     setPhase('playing');
   }, []);
   const clearMoveAnimation = useCallback(() => setMoveAnimation(null), []);
-  const clearTileSwapAnimation = useCallback(() => setTileSwapAnimation(null), []);
+  const clearTileSwapAnimation = useCallback(() => {
+    setTileSwapAnimation(null);
+    // Apply deferred board updates now that the animation has completed
+    if (pendingBoardUpdatesRef.current.length > 0) {
+      _applyBoardUpdates(pendingBoardUpdatesRef.current);
+      pendingBoardUpdatesRef.current = [];
+    }
+  }, [_applyBoardUpdates]);
   const clearStealAnimation = useCallback(() => setStealAnimation(null), []);
   const turnComplete = useCallback(() => {
     socketRef.current?.emit('turn_complete', {});

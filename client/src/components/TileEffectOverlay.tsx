@@ -123,7 +123,7 @@ export function TileEffectOverlay({ effect, playerToken, onClose }: Props) {
         <p style={styles.message}>{effect.message}</p>
         {effect.autoMarbles ? (
           <p className="animate-pulse" style={styles.bonus}>
-            +{effect.autoMarbles} marble(s) from points!
+            +{effect.autoMarbles} marble{effect.autoMarbles > 1 ? 's' : ''} earned!
           </p>
         ) : null}
         <span style={styles.tap}>{canDismiss ? 'Tap to dismiss' : '...'}</span>

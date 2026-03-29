@@ -816,28 +816,66 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
     };
   }, []);
 
-  // Pan handlers
+  // ── Multitouch pan / pinch-to-zoom ────────────────────────────────────────
+  const pointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
+  const pinchRef = useRef<{ dist: number; scale: number; cx: number; cy: number } | null>(null);
+  const dragStartRef = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
+  const [hasScrollWheel, setHasScrollWheel] = useState(false);
+
   const handlePointerDown = (e: React.PointerEvent) => {
-    dragRef.current = {
-      dragging: true,
-      startX: e.clientX,
-      startY: e.clientY,
-      offsetX: offset.x,
-      offsetY: offset.y,
-    };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (pointersRef.current.size === 1) {
+      dragStartRef.current = { x: e.clientX, y: e.clientY, ox: offsetRef.current.x, oy: offsetRef.current.y };
+      pinchRef.current = null;
+    } else if (pointersRef.current.size === 2) {
+      // Start pinch
+      dragStartRef.current = null;
+      const pts = [...pointersRef.current.values()];
+      const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      const cx = (pts[0].x + pts[1].x) / 2;
+      const cy = (pts[0].y + pts[1].y) / 2;
+      pinchRef.current = { dist, scale: scaleRef.current, cx, cy };
+    }
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
-    if (!dragRef.current.dragging) return;
-    setOffset({
-      x: dragRef.current.offsetX + (e.clientX - dragRef.current.startX),
-      y: dragRef.current.offsetY + (e.clientY - dragRef.current.startY),
-    });
+    pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (pointersRef.current.size === 2 && pinchRef.current) {
+      const pts = [...pointersRef.current.values()];
+      const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      const ratio = dist / pinchRef.current.dist;
+      setScale(Math.max(0.3, Math.min(5, pinchRef.current.scale * ratio)));
+    } else if (pointersRef.current.size === 1 && dragStartRef.current) {
+      setOffset({
+        x: dragStartRef.current.ox + (e.clientX - dragStartRef.current.x),
+        y: dragStartRef.current.oy + (e.clientY - dragStartRef.current.y),
+      });
+    }
   };
 
-  const handlePointerUp = () => {
-    dragRef.current.dragging = false;
+  const handlePointerUp = (e: React.PointerEvent) => {
+    pointersRef.current.delete(e.pointerId);
+    if (pointersRef.current.size < 2) pinchRef.current = null;
+    if (pointersRef.current.size === 0) dragStartRef.current = null;
   };
+
+  // Scroll-wheel zoom (desktop)
+  const handleWheel = useCallback((e: WheelEvent) => {
+    e.preventDefault();
+    setHasScrollWheel(true);
+    const zoomFactor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+    setScale((s) => Math.max(0.3, Math.min(5, s * zoomFactor)));
+  }, []);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    el.addEventListener('wheel', handleWheel, { passive: false });
+    return () => el.removeEventListener('wheel', handleWheel);
+  }, [handleWheel]);
 
   // Tile tap for movement choice
   const handleClick = (e: React.MouseEvent) => {
@@ -874,6 +912,51 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
     if (closest) onTileClick(closest.id);
   };
 
+  // ── Zoom to fit reachable tiles + current player tile ────────────────────
+  useEffect(() => {
+    if (!board || !myPlayerId || reachableTiles.length === 0) return;
+    const container = containerRef.current;
+    if (!container) return;
+
+    const me = players.find((p) => p.id === myPlayerId);
+    const myTile = me ? board.tiles[String(me.currentTile)] : null;
+
+    // Gather all tile positions (reachable + current)
+    const coords: { x: number; y: number }[] = [];
+    for (const rt of reachableTiles) {
+      const t = board.tiles[String(rt.tileId)];
+      if (t) coords.push({ x: t.x, y: t.y });
+    }
+    if (myTile) coords.push({ x: myTile.x, y: myTile.y });
+    if (coords.length === 0) return;
+
+    const minX = Math.min(...coords.map((c) => c.x));
+    const maxX = Math.max(...coords.map((c) => c.x));
+    const minY = Math.min(...coords.map((c) => c.y));
+    const maxY = Math.max(...coords.map((c) => c.y));
+
+    const cx = (minX + maxX) / 2;
+    const cy = (minY + maxY) / 2;
+
+    // Add buffer (TILE_W * 3 on each side)
+    const spanX = (maxX - minX) + TILE_W * 6;
+    const spanY = (maxY - minY) + TILE_H * 6;
+
+    const w = container.clientWidth;
+    const h = container.clientHeight;
+    const boardW = board.width || 800;
+    const boardH = board.height || 600;
+    const fitScaleBase = Math.min(w / (boardW + 40), h / (boardH + 40));
+
+    // Compute scale that fits the span
+    const neededScale = Math.min(w / (spanX * fitScaleBase), h / (spanY * fitScaleBase));
+    // Clamp: don't zoom out too far or zoom in more than PLAYER_ZOOM
+    const targetScale = Math.max(0.5, Math.min(PLAYER_ZOOM, neededScale));
+
+    smoothCenterOnTile(cx, cy, targetScale, 500);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reachableTiles.length > 0 ? 'has' : 'none']);
+
   return (
     <div ref={containerRef} style={styles.container}>
       <canvas
@@ -886,12 +969,16 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
         onClick={handleClick}
       />
       <div style={styles.zoomControls}>
-        <button style={styles.zoomBtn} onClick={() => setScale((s) => Math.min(5, s * 1.2))}>
-          +
-        </button>
-        <button style={styles.zoomBtn} onClick={() => setScale((s) => Math.max(0.3, s / 1.2))}>
-          -
-        </button>
+        {!hasScrollWheel && (
+          <>
+            <button style={styles.zoomBtn} onClick={() => setScale((s) => Math.min(5, s * 1.2))}>
+              +
+            </button>
+            <button style={styles.zoomBtn} onClick={() => setScale((s) => Math.max(0.3, s / 1.2))}>
+              -
+            </button>
+          </>
+        )}
         <button
           style={styles.zoomBtn}
           title="Centre on me"

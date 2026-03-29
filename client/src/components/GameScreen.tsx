@@ -7,7 +7,7 @@ import type {
   ActivityItem,
 } from '../types/game';
 import { GameBoard, type MoveAnimation, type TileSwapAnimation, type StealAnimation } from './GameBoard';
-import { DiceRoller } from './DiceRoller';
+import { DiceOverlay } from './DiceOverlay';
 import { TileEffectOverlay } from './TileEffectOverlay';
 import { MinigameResultsOverlay } from './MinigameResultsOverlay';
 import { Scoreboard } from './Scoreboard';
@@ -126,6 +126,16 @@ export function GameScreen({
       const color: ActivityItem['color'] =
         effectToShow.color === 'green' ? 'green' : effectToShow.color === 'red' ? 'red' : 'neutral';
       onAddActivityItem(`${effectToShow.playerName}: ${effectToShow.message}`, color);
+      if (effectToShow.autoMarbles) {
+        onAddActivityItem(`\uD83D\uDD2E ${effectToShow.playerName} earned ${effectToShow.autoMarbles} marble from points!`, 'gold');
+      }
+      // Non-active players don't see the popup overlay, so auto-clear the effect
+      // immediately so it doesn't block turn transitions.
+      if (effectToShow.playerId !== playerId) {
+        setEffectToShow(null);
+        onClearTileEffect();
+        onTurnComplete();
+      }
     }
   }, [effectToShow]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -137,10 +147,10 @@ export function GameScreen({
   );
 
   useEffect(() => {
-    if (!effectToShow && !tileEffect && !minigameResults) {
+    if (!effectToShow && !tileEffect && !minigameResults && !tileSwapAnimation) {
       setDisplayedTurnPlayerId(gameState.currentTurnPlayerId);
     }
-  }, [gameState.currentTurnPlayerId, effectToShow, tileEffect, minigameResults]);
+  }, [gameState.currentTurnPlayerId, effectToShow, tileEffect, minigameResults, tileSwapAnimation]);
 
   // ── Derived values ───────────────────────────────────────────────────────
   const myPlayer = playerId ? gameState.players[playerId] : null;
@@ -228,35 +238,22 @@ export function GameScreen({
         {/* Activity feed — bottom-left overlay */}
         <ActivityFeed items={activityFeed} />
 
-        {/* Dice roller — floats at bottom-center over the board */}
-        {isMyTurn && !effectToShow && (
-          <div style={styles.diceFloat}>
-            <DiceRoller
-              onRoll={onRollDice}
-              hasRerolls={(myPlayer?.modifiers.rerolls ?? 0) > 0}
-              hasDoubleDice={(myPlayer?.modifiers.double_dice ?? 0) > 0}
-              hasWorstDice={(myPlayer?.modifiers.worst_dice ?? 0) > 0}
-              rolledValue={diceResult?.playerId === playerId ? diceResult.roll : null}
-            />
-            {needsToChooseMove && (
-              <p style={styles.diceFloatHint}>
-                Tap a highlighted tile! (Rolled {diceResult.roll})
-              </p>
-            )}
-          </div>
+        {/* Physics dice overlay — visible during active turns */}
+        {!effectToShow && !choiceToShow && !minigameResults && (
+          <DiceOverlay
+            isMyTurn={isMyTurn}
+            rolledValue={diceResult ? diceResult.roll : null}
+            hasDoubleDice={(myPlayer?.modifiers.double_dice ?? 0) > 0}
+            hasWorstDice={(myPlayer?.modifiers.worst_dice ?? 0) > 0}
+            hasRerolls={(myPlayer?.modifiers.rerolls ?? 0) > 0}
+            onRoll={onRollDice}
+          />
         )}
-      </div>
 
-      {/* Thin status strip — only non-dice messages; fixed height so layout never shifts */}
-      <div style={styles.actionArea}>
-        {!isMyTurn && !isSpectator && !effectToShow && (
-          <p style={styles.waitText}>
-            Waiting for {currentTurnPlayer?.name || 'someone'}...
-          </p>
-        )}
-        {diceResult && diceResult.playerId !== playerId && (
-          <p style={styles.infoText}>
-            {diceResult.playerName} rolled {diceResult.roll}!
+        {/* Tile-pick hint when choosing a move */}
+        {needsToChooseMove && (
+          <p style={styles.tilePickHint}>
+            Tap a highlighted tile! (Rolled {diceResult.roll})
           </p>
         )}
       </div>
@@ -285,8 +282,8 @@ export function GameScreen({
         </div>
       )}
 
-      {/* Effect overlays */}
-      {effectToShow && (
+      {/* Effect overlays — only show for the active player (or if stolen from) */}
+      {effectToShow && effectToShow.playerId === playerId && (
         <TileEffectOverlay
           effect={effectToShow}
           playerToken={effectPlayerToken}
@@ -375,48 +372,21 @@ const styles: Record<string, React.CSSProperties> = {
     overflow: 'hidden',
     position: 'relative',
   },
-  actionArea: {
-    padding: '4px 16px',
-    textAlign: 'center',
-    minHeight: '28px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  diceFloat: {
+  tilePickHint: {
     position: 'absolute',
-    bottom: '16px',
+    bottom: 20,
     left: '50%',
     transform: 'translateX(-50%)',
-    zIndex: 20,
-    background: 'rgba(10, 25, 47, 0.88)',
-    borderRadius: '18px',
-    padding: '8px 16px 10px',
-    backdropFilter: 'blur(8px)',
-    border: '1px solid rgba(35, 53, 84, 0.9)',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    boxShadow: '0 4px 24px rgba(0,0,0,0.4)',
-  },
-  diceFloatHint: {
+    zIndex: 25,
     color: '#ccd6f6',
-    fontSize: '12px',
-    fontWeight: 500,
-    margin: '4px 0 0 0',
-    textAlign: 'center',
+    fontSize: '13px',
+    fontWeight: 600,
+    background: 'rgba(10, 25, 47, 0.85)',
+    padding: '6px 16px',
+    borderRadius: '10px',
+    backdropFilter: 'blur(6px)',
     whiteSpace: 'nowrap',
-  },
-  waitText: {
-    color: '#8892b0',
-    fontSize: '14px',
-    margin: '4px 0',
-  },
-  infoText: {
-    color: '#ccd6f6',
-    fontSize: '14px',
-    fontWeight: 500,
-    margin: '4px 0',
+    pointerEvents: 'none',
   },
   overlay: {
     position: 'fixed',

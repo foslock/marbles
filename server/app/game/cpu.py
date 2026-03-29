@@ -44,8 +44,8 @@ def cpu_minigame_score(minigame_type: str) -> int:
 
 async def run_cpu_turn(sio, session, player, get_reachable_fn, check_battle_fn):
     """Execute a complete CPU turn: roll → move → handle effect → swap → end turn."""
-    # Brief pause so the action doesn't feel instantaneous
-    await asyncio.sleep(random.uniform(1.2, 2.0))
+    # Thinking pause before rolling — feels like the CPU is deciding
+    await asyncio.sleep(random.uniform(1.8, 3.0))
 
     # ── Roll dice ────────────────────────────────────────────────────────────
     if player.modifiers.get("double_dice", 0) > 0:
@@ -80,7 +80,8 @@ async def run_cpu_turn(sio, session, player, get_reachable_fn, check_battle_fn):
         await check_battle_fn(session, player)
         return
 
-    await asyncio.sleep(0.8)
+    # Pause while "considering" which tile to move to
+    await asyncio.sleep(random.uniform(1.5, 2.5))
 
     # ── Choose a tile ────────────────────────────────────────────────────────
     chosen = _choose_tile(reachable, session, player)
@@ -135,7 +136,8 @@ async def run_cpu_turn(sio, session, player, get_reachable_fn, check_battle_fn):
 
     # ── Handle effects that need a choice ────────────────────────────────────
     if effect_result.get("requiresChoice"):
-        await asyncio.sleep(0.6)
+        # Pause while "thinking about" who to target
+        await asyncio.sleep(random.uniform(1.5, 2.5))
         choice_type = effect_result["choiceType"]
         options = effect_result.get("options", [])
         target_id = _choose_target(choice_type, options)
@@ -150,7 +152,7 @@ async def run_cpu_turn(sio, session, player, get_reachable_fn, check_battle_fn):
         )
 
     # ── Wait for clients to see the effect overlay ───────────────────────────
-    await asyncio.sleep(2.5)
+    await asyncio.sleep(random.uniform(3.0, 4.0))
 
     # ── Perform deferred tile swap ───────────────────────────────────────────
     tile_id = chosen["tileId"]

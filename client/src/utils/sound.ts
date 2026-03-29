@@ -9,11 +9,32 @@ function getCtx(): AudioContext {
   if (!audioCtx) {
     audioCtx = new AudioContext();
   }
-  // Resume if suspended (browser autoplay policy)
+  // Resume if suspended (browser autoplay policy or tab losing focus)
   if (audioCtx.state === 'suspended') {
     audioCtx.resume();
   }
   return audioCtx;
+}
+
+// Re-activate AudioContext when the tab regains visibility.
+// Browsers may suspend (or even close) the context when the page is hidden.
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && audioCtx) {
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      } else if (audioCtx.state === 'closed') {
+        // Context was destroyed — create a fresh one
+        audioCtx = null;
+      }
+    }
+  });
+  // Also try to resume on any user interaction (belt-and-suspenders)
+  const resumeOnInteraction = () => {
+    if (audioCtx?.state === 'suspended') audioCtx.resume();
+  };
+  document.addEventListener('pointerdown', resumeOnInteraction, { passive: true });
+  document.addEventListener('keydown', resumeOnInteraction, { passive: true });
 }
 
 function playTone(
