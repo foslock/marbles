@@ -63,6 +63,9 @@ export function DiceOverlay({ isMyTurn, rolledValue, hasDoubleDice, hasWorstDice
   const rafRef = useRef(0);
   const targetFaceRef = useRef<number | null>(null);
   const settleCounterRef = useRef(0);
+  const landedAtRef = useRef(0);          // timestamp when die landed
+  const FADE_DELAY = 1000;                // ms to hold before fading
+  const FADE_DURATION = 500;              // ms for the fade-out
 
   // Center the die when container size is known
   const centerDie = useCallback(() => {
@@ -81,6 +84,7 @@ export function DiceOverlay({ isMyTurn, rolledValue, hasDoubleDice, hasWorstDice
     settleCounterRef.current = 0;
     targetFaceRef.current = null;
     rolledRef.current = false;
+    landedAtRef.current = 0;
     phaseRef.current = 'idle';
     setPhase('idle');
     setDisplayFace(1);
@@ -176,6 +180,7 @@ export function DiceOverlay({ isMyTurn, rolledValue, hasDoubleDice, hasWorstDice
             d.vx = 0; d.vy = 0; d.angularV = 0;
             phaseRef.current = 'landed';
             setPhase('landed');
+            landedAtRef.current = performance.now();
             SFX.diceResult();
             Haptics.medium();
           } else {
@@ -194,7 +199,23 @@ export function DiceOverlay({ isMyTurn, rolledValue, hasDoubleDice, hasWorstDice
         }
       }
 
+      // ── Fade out after landing ─────────────────────────────────────────────
+      let opacity = 1;
+      if (phaseRef.current === 'landed' && landedAtRef.current > 0) {
+        const elapsed = performance.now() - landedAtRef.current;
+        if (elapsed > FADE_DELAY) {
+          opacity = Math.max(0, 1 - (elapsed - FADE_DELAY) / FADE_DURATION);
+        }
+      }
+
+      if (opacity <= 0) {
+        // Fully faded — skip drawing
+        rafRef.current = requestAnimationFrame(tick);
+        return;
+      }
+
       // ── Draw die ───────────────────────────────────────────────────────────
+      ctx.globalAlpha = opacity;
       const cx = d.x + DIE_SIZE / 2;
       const cy = d.y + DIE_SIZE / 2;
 
