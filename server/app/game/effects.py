@@ -68,6 +68,10 @@ def process_tile_effect(
             player.modifiers["double_dice"] = player.modifiers.get("double_dice", 0) + 1
             result["message"] = "Next roll uses two dice (summed)!"
 
+        case "short_stop":
+            player.modifiers["short_stop"] = player.modifiers.get("short_stop", 0) + 1
+            result["message"] = "Short Stop! Next turn you can stop on any tile along the way."
+
         case "gain_marble":
             player.marbles += 1
             result["message"] = "🎉 You found a marble!"
@@ -109,6 +113,10 @@ def process_tile_effect(
         case "worst_dice_next":
             player.modifiers["worst_dice"] = player.modifiers.get("worst_dice", 0) + 1
             result["message"] = "Next roll uses two dice — you take the WORST!"
+
+        case "dizzy":
+            player.modifiers["dizzy"] = player.modifiers.get("dizzy", 0) + 1
+            result["message"] = "Dizzy! Next turn you move in a random direction!"
 
         case "lose_marble":
             if player.marbles > 0:

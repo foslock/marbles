@@ -203,7 +203,7 @@ export function GameScreen({
     : null;
 
   const needsToChooseMove =
-    diceSettled && diceResult && diceResult.playerId === playerId && diceResult.reachableTiles.length > 0;
+    diceSettled && diceResult && diceResult.playerId === playerId && diceResult.reachableTiles.length > 0 && !diceResult.dizzy;
 
   const handleChooseMove = (tileId: number) => {
     const tile = diceResult?.reachableTiles.find((t) => t.tileId === tileId);
