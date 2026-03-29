@@ -15,34 +15,100 @@ interface Props {
   onTileClick?: (tileId: number) => void;
   moveAnimation?: MoveAnimation | null;
   onAnimationComplete?: () => void;
+  myPlayerId?: string | null;
 }
 
-const TILE_RADIUS = 18;
+// Tile dimensions
+const TILE_W = 38;
+const TILE_H = 38;
+const TILE_CORNER = 7;
+const INNER_CIRCLE_R = 10;
+
+const TILE_BG = '#1a2e4a';
 const TILE_COLORS = {
   green: '#27ae60',
   red: '#e74c3c',
-  neutral: '#34495e',
+  neutral: '#546e7a',
 };
-const REACHABLE_COLOR = '#f39c12';
+const REACHABLE_STROKE = '#f39c12';
 const EDGE_COLOR = '#1a3a5c';
 
-export function GameBoard({ board, players, reachableTiles, onTileClick, moveAnimation, onAnimationComplete }: Props) {
+// How much to zoom in on the player's tile
+const PLAYER_ZOOM = 2.5;
+
+export function GameBoard({ board, players, reachableTiles, onTileClick, moveAnimation, onAnimationComplete, myPlayerId }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
-  const [scale, setScale] = useState(1);
+  const [scale, setScale] = useState(PLAYER_ZOOM);
   const dragRef = useRef({ dragging: false, startX: 0, startY: 0, offsetX: 0, offsetY: 0 });
 
   // Animation state
   const animRef = useRef<{
     playerId: string;
     path: { x: number; y: number }[];
-    progress: number; // 0 to path.length - 1
+    progress: number;
     startTime: number;
   } | null>(null);
   const rafRef = useRef<number>(0);
 
   const reachableSet = new Set(reachableTiles.map((r) => r.tileId));
+
+  // Compute offset to center a board-coordinate point at the canvas centre
+  const _centerOffset = useCallback((bx: number, by: number, s: number): { x: number; y: number } => {
+    const container = containerRef.current;
+    if (!container || !board) return { x: 0, y: 0 };
+    const w = container.clientWidth;
+    const h = container.clientHeight;
+    const boardW = board.width || 800;
+    const boardH = board.height || 600;
+    const fitScaleBase = Math.min(w / (boardW + 40), h / (boardH + 40));
+    const fitScaleActual = fitScaleBase * s;
+    return {
+      x: (boardW / 2 - bx) * fitScaleActual,
+      y: (boardH / 2 - by) * fitScaleActual,
+    };
+  }, [board]);
+
+  // Center view on a tile (board coords) at the given scale
+  const centerOnTile = useCallback((tileX: number, tileY: number, s: number) => {
+    const off = _centerOffset(tileX, tileY, s);
+    setScale(s);
+    setOffset(off);
+  }, [_centerOffset]);
+
+  // Center on the local player's tile
+  const centerOnMyPlayer = useCallback(() => {
+    if (!board || !myPlayerId) return;
+    const me = players.find((p) => p.id === myPlayerId);
+    if (!me) return;
+    const tile = board.tiles[String(me.currentTile)];
+    if (!tile) return;
+    centerOnTile(tile.x, tile.y, PLAYER_ZOOM);
+  }, [board, myPlayerId, players, centerOnTile]);
+
+  // Auto-center on first board load
+  useEffect(() => {
+    if (board && myPlayerId) {
+      centerOnMyPlayer();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [board?.width]); // only on initial board load (width is stable after generation)
+
+  // Helper: draw a rounded rectangle path
+  function _roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.arcTo(x + w, y, x + w, y + r, r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+    ctx.lineTo(x + r, y + h);
+    ctx.arcTo(x, y + h, x, y + h - r, r);
+    ctx.lineTo(x, y + r);
+    ctx.arcTo(x, y, x + r, y, r);
+    ctx.closePath();
+  }
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -64,7 +130,6 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
     ctx.clearRect(0, 0, w, h);
     ctx.save();
 
-    // Auto-fit board into view
     const boardW = board.width || 800;
     const boardH = board.height || 600;
     const fitScale = Math.min(w / (boardW + 40), h / (boardH + 40)) * scale;
@@ -93,34 +158,43 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
       }
     }
 
+    const pulse = Math.sin(Date.now() / 400) * 0.3 + 0.7; // 0.4–1.0
+
     // Draw tiles
-    const pulse = Math.sin(Date.now() / 400) * 0.3 + 0.7; // 0.4 to 1.0
     for (const tile of tiles) {
       const isReachable = reachableSet.has(tile.id);
-      const baseColor = TILE_COLORS[tile.color] || TILE_COLORS.neutral;
+      const innerColor = TILE_COLORS[tile.color] || TILE_COLORS.neutral;
 
-      // Glow ring for reachable tiles
+      const rx = tile.x - TILE_W / 2;
+      const ry = tile.y - TILE_H / 2;
+
+      // Tile background (rounded rect)
+      _roundRect(ctx, rx, ry, TILE_W, TILE_H, TILE_CORNER);
+      ctx.fillStyle = TILE_BG;
+      ctx.fill();
+
+      // Coloured inner circle
+      ctx.beginPath();
+      ctx.arc(tile.x, tile.y, INNER_CIRCLE_R, 0, Math.PI * 2);
+      ctx.fillStyle = innerColor;
+      ctx.fill();
+
+      // Reachable: animated orange outline on the rounded rect
       if (isReachable) {
-        ctx.beginPath();
-        ctx.arc(tile.x, tile.y, TILE_RADIUS + 6, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(243, 156, 18, ${pulse * 0.3})`;
+        _roundRect(ctx, rx, ry, TILE_W, TILE_H, TILE_CORNER);
+        ctx.strokeStyle = `rgba(243, 156, 18, ${pulse})`;
+        ctx.lineWidth = 3;
+        ctx.stroke();
+
+        // Subtle glow fill
+        _roundRect(ctx, rx, ry, TILE_W, TILE_H, TILE_CORNER);
+        ctx.fillStyle = `rgba(243, 156, 18, ${pulse * 0.08})`;
         ctx.fill();
       }
 
-      ctx.beginPath();
-      ctx.arc(tile.x, tile.y, TILE_RADIUS, 0, Math.PI * 2);
-      ctx.fillStyle = isReachable ? REACHABLE_COLOR : baseColor;
-      ctx.fill();
-
-      if (isReachable) {
-        ctx.strokeStyle = `rgba(255, 255, 255, ${pulse})`;
-        ctx.lineWidth = 3;
-        ctx.stroke();
-      }
-
+      // Fork tile indicator: dashed outline
       if (tile.isFork) {
-        ctx.beginPath();
-        ctx.arc(tile.x, tile.y, TILE_RADIUS + 4, 0, Math.PI * 2);
+        _roundRect(ctx, rx - 3, ry - 3, TILE_W + 6, TILE_H + 6, TILE_CORNER + 3);
         ctx.strokeStyle = '#f39c12';
         ctx.lineWidth = 2;
         ctx.setLineDash([4, 3]);
@@ -133,7 +207,6 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
     const tilePlayerMap: Record<number, PlayerState[]> = {};
     const animating = animRef.current;
     for (const p of players) {
-      // Skip animated player from tile map — we'll draw them separately
       if (animating && p.id === animating.playerId) continue;
       if (!tilePlayerMap[p.currentTile]) tilePlayerMap[p.currentTile] = [];
       tilePlayerMap[p.currentTile].push(p);
@@ -142,14 +215,11 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
     for (const [tileIdStr, tilePlayers] of Object.entries(tilePlayerMap)) {
       const tile = board.tiles[tileIdStr];
       if (!tile) continue;
-
       for (let i = 0; i < tilePlayers.length; i++) {
         const p = tilePlayers[i];
         const angle = (i / tilePlayers.length) * Math.PI * 2 - Math.PI / 2;
         const spread = tilePlayers.length > 1 ? 14 : 0;
-        const px = tile.x + Math.cos(angle) * spread;
-        const py = tile.y + Math.sin(angle) * spread;
-        _drawToken(ctx, px, py, p);
+        _drawToken(ctx, tile.x + Math.cos(angle) * spread, tile.y + Math.sin(angle) * spread, p);
       }
     }
 
@@ -164,7 +234,7 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
         const ax = from.x + (to.x - from.x) * segFrac;
         const ay = from.y + (to.y - from.y) * segFrac;
 
-        // Trail effect
+        // Trail
         ctx.beginPath();
         ctx.arc(ax, ay, 14, 0, Math.PI * 2);
         ctx.fillStyle = 'rgba(243, 156, 18, 0.3)';
@@ -182,7 +252,6 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
     const handleResize = () => draw();
     window.addEventListener('resize', handleResize);
 
-    // Animate pulse on reachable tiles
     let pulseRaf = 0;
     if (reachableTiles.length > 0) {
       const pulseTick = () => {
@@ -198,7 +267,7 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
     };
   }, [draw, reachableTiles.length]);
 
-  // Start animation when moveAnimation prop changes
+  // Move animation
   useEffect(() => {
     if (!moveAnimation || !board) return;
     const pathCoords = moveAnimation.path
@@ -215,10 +284,10 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
       startTime: performance.now(),
     };
 
-    const SPEED = 200; // ms per tile hop
+    const SPEED = 200;
     const totalDuration = (pathCoords.length - 1) * SPEED;
-
     let lastHop = -1;
+
     const tick = (now: number) => {
       const anim = animRef.current;
       if (!anim) return;
@@ -226,24 +295,26 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
       const elapsed = now - anim.startTime;
       anim.progress = Math.min(elapsed / SPEED, pathCoords.length - 1);
 
-      // Play hop sound at each tile
       const currentHop = Math.floor(anim.progress);
       if (currentHop > lastHop) {
         lastHop = currentHop;
-        if (currentHop < pathCoords.length - 1) {
-          Haptics.light();
-        }
+        if (currentHop < pathCoords.length - 1) Haptics.light();
       }
 
       draw();
 
       if (elapsed >= totalDuration) {
-        // Animation complete
         SFX.tileLand();
         Haptics.medium();
         animRef.current = null;
         draw();
         onAnimationComplete?.();
+        // Re-centre on the player after they finish moving
+        if (moveAnimation.playerId === myPlayerId) {
+          const lastTileId = moveAnimation.path[moveAnimation.path.length - 1];
+          const destTile = board.tiles[String(lastTileId)];
+          if (destTile) centerOnTile(destTile.x, destTile.y, PLAYER_ZOOM);
+        }
         return;
       }
 
@@ -256,9 +327,9 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       animRef.current = null;
     };
-  }, [moveAnimation, board, draw, onAnimationComplete]);
+  }, [moveAnimation, board, draw, onAnimationComplete, myPlayerId, centerOnTile]);
 
-  // Touch/mouse handlers for pan
+  // Pan handlers
   const handlePointerDown = (e: React.PointerEvent) => {
     dragRef.current = {
       dragging: true,
@@ -281,7 +352,7 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
     dragRef.current.dragging = false;
   };
 
-  // Handle tile tap
+  // Tile tap for movement choice
   const handleClick = (e: React.MouseEvent) => {
     if (!board || !onTileClick) return;
     const canvas = canvasRef.current;
@@ -300,24 +371,20 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
     const tx = w / 2 - (boardW / 2) * fitScale + offset.x;
     const ty = h / 2 - (boardH / 2) * fitScale + offset.y;
 
-    // Convert click to board coords
     const bx = (clickX - tx) / fitScale;
     const by = (clickY - ty) / fitScale;
 
-    // Find closest reachable tile
     let closest: { id: number; dist: number } | null = null;
     for (const rt of reachableTiles) {
       const tile = board.tiles[String(rt.tileId)];
       if (!tile) continue;
       const dist = Math.hypot(tile.x - bx, tile.y - by);
-      if (dist < TILE_RADIUS * 2 && (!closest || dist < closest.dist)) {
+      if (dist < (TILE_W / 2 + 8) && (!closest || dist < closest.dist)) {
         closest = { id: rt.tileId, dist };
       }
     }
 
-    if (closest) {
-      onTileClick(closest.id);
-    }
+    if (closest) onTileClick(closest.id);
   };
 
   return (
@@ -332,7 +399,7 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
         onClick={handleClick}
       />
       <div style={styles.zoomControls}>
-        <button style={styles.zoomBtn} onClick={() => setScale((s) => Math.min(3, s * 1.2))}>
+        <button style={styles.zoomBtn} onClick={() => setScale((s) => Math.min(5, s * 1.2))}>
           +
         </button>
         <button style={styles.zoomBtn} onClick={() => setScale((s) => Math.max(0.3, s / 1.2))}>
@@ -340,7 +407,15 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
         </button>
         <button
           style={styles.zoomBtn}
-          onClick={() => { setScale(1); setOffset({ x: 0, y: 0 }); }}
+          title="Centre on me"
+          onClick={() => {
+            if (myPlayerId) {
+              centerOnMyPlayer();
+            } else {
+              setScale(1);
+              setOffset({ x: 0, y: 0 });
+            }
+          }}
         >
           ⌂
         </button>

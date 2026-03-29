@@ -161,6 +161,10 @@ export function useSocket() {
     socket.on('minigame_results', (data: MinigameResults) => {
       setMinigameResults(data);
       setMinigameInfo(null);
+      // Transition back to 'playing' so the results overlay renders inside GameScreen.
+      // turn_update arrives right after but must NOT clear minigameResults — the
+      // overlay's own timer / user tap handles that.
+      setPhase('playing');
     });
 
     socket.on('turn_update', (data) => {
@@ -175,10 +179,10 @@ export function useSocket() {
         };
       });
       setDiceResult(null);
-      setTileEffect(null);
-      setBattleResult(null);
-      setMinigameResults(null);
-      if (minigameInfo) setPhase('playing');
+      // Do NOT clear tileEffect, battleResult, or minigameResults here.
+      // turn_update arrives almost immediately after these events, before the
+      // player has seen the overlay. Each overlay auto-dismisses via its own
+      // timer, or the player taps to close it.
       // Notify player it's their turn
       if (data.currentTurnPlayerId === playerIdRef.current) {
         SFX.yourTurn();

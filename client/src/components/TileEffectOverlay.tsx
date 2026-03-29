@@ -9,18 +9,24 @@ interface Props {
 }
 
 const EFFECT_ICONS: Record<string, string> = {
+  gain_10_points: '✨',
+  gain_25_points: '✨',
+  gain_50_points: '💰',
   gain_marble: '🔮',
-  gain_points: '✨',
-  gain_reroll: '🔄',
-  gain_protection: '🛡️',
-  gain_double_dice: '🎲',
-  lose_marble: '💔',
-  lose_points: '📉',
+  reroll: '🔄',
+  protection: '🛡️',
+  double_dice_next: '🎲',
   steal_points: '🏴‍☠️',
-  swap_marbles: '🔀',
-  give_worst_dice: '⬇️',
+  steal_marble: '⚡',
+  steal_marble_empty: '🤷',
+  lose_10_points: '📉',
+  lose_25_points: '📉',
+  lose_50_points: '💸',
+  lose_marble: '💔',
+  worst_dice_next: '⬇️',
+  give_points: '🎁',
+  give_marble: '💝',
   fortune_cookie: '🥠',
-  blank: '⚪',
 };
 
 export function TileEffectOverlay({ effect, onClose }: Props) {

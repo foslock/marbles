@@ -336,12 +336,21 @@ def _assign_tile_types(tiles: dict[int, TileData]) -> None:
     neutral_iter = iter(neutral_bag)
     non_neutral_iter = iter(non_neutral_bag)
 
-    for tid in tiles:
-        if tid in fork_merge_ids:
-            cat = next(neutral_iter, TileCategory.NEUTRAL)
-        else:
-            cat = next(non_neutral_iter, None) or next(neutral_iter, TileCategory.NEUTRAL)
+    # Shuffle the non-fork/merge IDs so alt-route tiles get a fair share of
+    # non-neutral categories (without shuffling, they always fall at the end
+    # of the insertion-order iteration and exhaust the non-neutral bag).
+    other_ids = [tid for tid in tiles if tid not in fork_merge_ids]
+    random.shuffle(other_ids)
 
+    for tid in fork_merge_ids:
+        cat = next(neutral_iter, TileCategory.NEUTRAL)
+        color, effects = TILE_EFFECTS[cat]
+        tiles[tid].category = cat
+        tiles[tid].color = color
+        tiles[tid].effect = random.choice(effects)
+
+    for tid in other_ids:
+        cat = next(non_neutral_iter, None) or next(neutral_iter, TileCategory.NEUTRAL)
         color, effects = TILE_EFFECTS[cat]
         tiles[tid].category = cat
         tiles[tid].color = color
