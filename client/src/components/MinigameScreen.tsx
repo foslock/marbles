@@ -21,7 +21,7 @@ interface Props {
 export function MinigameScreen({ minigameInfo, playerId, onSubmitScore }: Props) {
   const { minigame } = minigameInfo;
   const [phase, setPhase] = useState<'countdown' | 'playing' | 'done'>('countdown');
-  const [countdown, setCountdown] = useState(3);
+  const [countdown, setCountdown] = useState(5);
   const [timeLeft, setTimeLeft] = useState(minigame.duration);
   const scoreRef = useRef(0);
   const submitted = useRef(false);
