@@ -228,10 +228,15 @@ def calculate_rankings(
 
 
 def apply_minigame_prizes(session, result: MinigameResult):
-    """Apply minigame prizes to player states."""
+    """Apply minigame prizes to player states and convert excess points to marbles."""
+    from ..effects import check_marble_conversion
+
     for ranking in result.rankings:
         player = session.players.get(ranking["id"])
         if not player:
             continue
         player.points += ranking["prizePoints"]
         player.marbles += ranking["prizeMarbles"]
+        new_marbles = check_marble_conversion(player)
+        if new_marbles:
+            ranking["autoMarbles"] = new_marbles

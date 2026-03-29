@@ -127,5 +127,11 @@ class TestApplyMinigamePrizes:
 
         for ranking in result.rankings:
             pid = ranking["id"]
-            assert session.players[pid].points == initial_points[pid] + ranking["prizePoints"]
-            assert session.players[pid].marbles == initial_marbles[pid] + ranking["prizeMarbles"]
+            expected_points = initial_points[pid] + ranking["prizePoints"]
+            expected_marbles = initial_marbles[pid] + ranking["prizeMarbles"]
+            # Auto-marble conversion: every 100 points becomes a marble
+            auto_marbles = expected_points // 100
+            expected_points %= 100
+            expected_marbles += auto_marbles
+            assert session.players[pid].points == expected_points
+            assert session.players[pid].marbles == expected_marbles
