@@ -190,8 +190,8 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
     const now = Date.now();
     // pulse: 0.0–1.0, drives reachable-tile glow and active-token ring
     const pulse = Math.sin(now / 300) * 0.5 + 0.5;
-    // bounce: ±5 px vertical float for the active player token
-    const bounce = Math.sin(now / 700) * 5;
+    // expandPulse: 0.0–1.0 repeating cycle for expanding circle effect
+    const expandPulse = (now % 1500) / 1500;
     const hasReachable = reachableSet.size > 0;
 
     // Draw edges — dim them slightly when a move choice is pending so
@@ -288,7 +288,7 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
           tile.y + Math.sin(angle) * spread,
           p,
           isActive,
-          isActive ? bounce : 0,
+          isActive ? expandPulse : 0,
           pulse,
         );
       }
@@ -489,6 +489,18 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
         if (currentHop < pathCoords.length - 1) Haptics.light();
       }
 
+      // Follow the moving token with the camera
+      if (
+        moveAnimation.playerId === myPlayerId ||
+        moveAnimation.playerId === activePlayerId
+      ) {
+        const seg = Math.min(Math.floor(anim.progress), pathCoords.length - 2);
+        const t = anim.progress - seg;
+        const ax = pathCoords[seg].x + (pathCoords[seg + 1].x - pathCoords[seg].x) * t;
+        const ay = pathCoords[seg].y + (pathCoords[seg + 1].y - pathCoords[seg].y) * t;
+        centerOnTile(ax, ay, PLAYER_ZOOM);
+      }
+
       drawRef.current();
 
       if (elapsed >= totalDuration) {
@@ -651,28 +663,22 @@ function _drawToken(
   py: number,
   p: PlayerState,
   isActive = false,
-  bounceY = 0,
-  pulse = 0,
+  expandPulse = 0,
+  _pulse = 0,
 ) {
-  const y = py + bounceY;
-
   if (isActive) {
-    // Outer soft glow disc
+    // Pulsing expanding circle that fades out
+    const radius = 12 + expandPulse * 18;
+    const alpha = 0.5 * (1 - expandPulse);
     ctx.beginPath();
-    ctx.arc(px, y, 20, 0, Math.PI * 2);
-    ctx.fillStyle = `rgba(243, 156, 18, ${0.12 + pulse * 0.10})`;
-    ctx.fill();
-
-    // Animated ring around the token
-    ctx.beginPath();
-    ctx.arc(px, y, 15, 0, Math.PI * 2);
-    ctx.strokeStyle = `rgba(243, 156, 18, ${0.6 + pulse * 0.4})`;
-    ctx.lineWidth = 2.5;
+    ctx.arc(px, py, radius, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(243, 156, 18, ${alpha})`;
+    ctx.lineWidth = 2;
     ctx.stroke();
   }
 
   ctx.beginPath();
-  ctx.arc(px, y, 10, 0, Math.PI * 2);
+  ctx.arc(px, py, 10, 0, Math.PI * 2);
   ctx.fillStyle = p.token?.color || '#fff';
   ctx.fill();
   ctx.strokeStyle = '#fff';
@@ -681,7 +687,7 @@ function _drawToken(
   ctx.font = '12px sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(p.token?.emoji || '?', px, y + 1);
+  ctx.fillText(p.token?.emoji || '?', px, py + 1);
 }
 
 const styles: Record<string, React.CSSProperties> = {

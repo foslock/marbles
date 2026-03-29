@@ -64,7 +64,7 @@ export function TileEffectOverlay({ effect, playerToken, onClose }: Props) {
     const start = Date.now();
     const tick = () => {
       const elapsed = Date.now() - start;
-      setProgress(Math.min(elapsed / AUTO_DISMISS_MS, 1));
+      setProgress(1 - Math.min(elapsed / AUTO_DISMISS_MS, 1));
       if (elapsed < AUTO_DISMISS_MS) rafId = requestAnimationFrame(tick);
     };
     let rafId = requestAnimationFrame(tick);
