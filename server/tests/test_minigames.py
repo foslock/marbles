@@ -62,7 +62,7 @@ class TestMakeConfig:
     def test_memory_has_sequence(self):
         config = _make_config("memory")
         assert "sequence" in config
-        assert len(config["sequence"]) == 12
+        assert len(config["sequence"]) == 16
 
     def test_size_match_has_sizes(self):
         config = _make_config("size_match")
