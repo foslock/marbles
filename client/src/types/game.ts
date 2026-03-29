@@ -16,6 +16,7 @@ export interface PlayerState {
   marbles: number;
   points: number;
   isConnected: boolean;
+  isCpu?: boolean;
   modifiers: {
     rerolls: number;
     protection: number;
@@ -54,6 +55,7 @@ export interface LobbyData {
     role: string;
     token: Token | null;
     isConnected: boolean;
+    isCpu?: boolean;
   }[];
 }
 

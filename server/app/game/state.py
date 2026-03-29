@@ -24,6 +24,7 @@ class PlayerState:
     marbles: int = 0
     points: int = 0
     is_connected: bool = True
+    is_cpu: bool = False
     modifiers: dict = field(default_factory=lambda: {
         "rerolls": 0,
         "protection": 0,
@@ -85,6 +86,7 @@ class GameSession:
                     "role": p.role,
                     "token": p.token,
                     "isConnected": p.is_connected,
+                    "isCpu": p.is_cpu,
                 }
                 for p in self.players.values()
             ],
@@ -112,6 +114,7 @@ class GameSession:
                     "marbles": p.marbles,
                     "points": p.points,
                     "isConnected": p.is_connected,
+                    "isCpu": p.is_cpu,
                     "modifiers": p.modifiers,
                 }
                 for p in self.players.values()
@@ -206,9 +209,9 @@ class SessionManager:
         for i, pid in enumerate(player_ids):
             session.players[pid].turn_order = i
 
-        # Generate board
+        # Generate board scaled to player count
         session.board_seed = random.randint(0, 999999)
-        session.board = generate_board(seed=session.board_seed)
+        session.board = generate_board(seed=session.board_seed, player_count=len(players))
 
         # Assign random starting tiles (from main path, non-fork/merge)
         safe_tiles = [

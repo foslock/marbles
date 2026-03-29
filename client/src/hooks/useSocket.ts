@@ -279,6 +279,10 @@ export function useSocket() {
     socketRef.current?.emit('end_game', {});
   }, []);
 
+  const addCpuPlayer = useCallback(() => {
+    socketRef.current?.emit('add_cpu_player', {});
+  }, []);
+
   return {
     connected,
     connectionError,
@@ -308,5 +312,6 @@ export function useSocket() {
     clearMinigameResults,
     clearMoveAnimation,
     endGame,
+    addCpuPlayer,
   };
 }

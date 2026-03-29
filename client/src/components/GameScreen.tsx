@@ -111,6 +111,7 @@ export function GameScreen({
             moveAnimation={moveAnimation}
             onAnimationComplete={onClearMoveAnimation}
             myPlayerId={playerId}
+            activePlayerId={gameState.currentTurnPlayerId}
           />
         )}
       </div>

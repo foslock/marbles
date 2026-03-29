@@ -76,6 +76,7 @@ export default function App() {
           lobby={socket.lobby}
           playerId={socket.playerId}
           onStartGame={socket.startGame}
+          onAddCpu={socket.addCpuPlayer}
         />
       )}
 

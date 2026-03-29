@@ -147,9 +147,15 @@ def generate_board(
     total_tiles: int = 45,
     num_forks: int = 2,
     seed: Optional[int] = None,
+    player_count: int = 2,
 ) -> Board:
     if seed is not None:
         random.seed(seed)
+
+    # Scale board tile count with player count so more players = more tiles,
+    # but not so many that collisions become rare.
+    # 2p → 40, 4p → 46, 6p → 52, 8p → 58
+    total_tiles = 34 + player_count * 3
 
     alt_tiles_per_fork = [random.randint(4, 7) for _ in range(num_forks)]
     total_alt_tiles = sum(alt_tiles_per_fork)
@@ -233,42 +239,38 @@ def generate_board(
 
 def _generate_main_loop_positions(
     count: int,
-    base_radius_x: float = 400.0,
-    base_radius_y: float = 300.0,
+    base_radius_x: float = 260.0,
+    base_radius_y: float = 180.0,
 ) -> list[tuple[float, float]]:
     """Generate positions for the main loop using a superellipse base shape.
 
-    A superellipse (squircle-ish) base fills more of the board area than a plain
-    ellipse — the sides are flatter and the corners are more pronounced, reducing
-    the empty center and giving a board-game border feel.  Large harmonic
-    perturbations applied radially add aggressive angle changes.
+    Tiles are distributed equidistantly along the path so that consecutive
+    tiles are always roughly the same distance apart — avoiding the sparse
+    gaps caused by parametric over-sampling at flat/fast path segments.
     """
-    # squareness n: 2 = standard ellipse, higher values approach a rectangle.
-    # exponent = 2/n; higher squareness → lower exponent → flatter sides.
     squareness = random.uniform(3.0, 5.0)
     exponent = 2.0 / squareness
 
-    # Stretch the shape to fill a landscape viewport
-    rx = base_radius_x * random.uniform(0.95, 1.15)
-    ry = base_radius_y * random.uniform(0.70, 0.90)
+    rx = base_radius_x * random.uniform(0.90, 1.10)
+    ry = base_radius_y * random.uniform(0.75, 0.95)
 
-    # Larger harmonics than before — create sharp bends and aggressive angles
+    # Reduced harmonic amplitudes keep the shape interesting without
+    # producing extremely long edge segments between tiles.
     num_harmonics = 5
-    amplitudes = [random.uniform(40, 110) for _ in range(num_harmonics)]
+    amplitudes = [random.uniform(10, 40) for _ in range(num_harmonics)]
     phases = [random.uniform(0, 2 * math.pi) for _ in range(num_harmonics)]
 
-    positions = []
-    for i in range(count):
-        t = 2 * math.pi * i / count
+    # Sample the continuous curve densely so we can resample equidistantly.
+    sample_count = max(1000, count * 20)
+    raw: list[tuple[float, float]] = []
+    for i in range(sample_count):
+        t = 2 * math.pi * i / sample_count
         cos_t = math.cos(t)
         sin_t = math.sin(t)
 
-        # Superellipse parametric form: |cos t|^exponent keeps the sign
         x_base = rx * math.copysign(abs(cos_t) ** exponent, cos_t)
         y_base = ry * math.copysign(abs(sin_t) ** exponent, sin_t)
 
-        # Harmonic perturbation applied radially (along the outward direction)
-        # so the shape deforms outward/inward rather than in a fixed axis direction
         base_len = math.hypot(x_base, y_base) or 1.0
         perturb = sum(
             amplitudes[k] * math.sin((k + 2) * t + phases[k])
@@ -276,10 +278,41 @@ def _generate_main_loop_positions(
         )
         x = x_base + perturb * (x_base / base_len)
         y = y_base + perturb * (y_base / base_len)
+        raw.append((x, y))
 
-        positions.append((x, y))
+    return _resample_equidistant(raw, count)
 
-    return positions
+
+def _resample_equidistant(
+    positions: list[tuple[float, float]], count: int
+) -> list[tuple[float, float]]:
+    """Return `count` points uniformly spaced along the closed path `positions`."""
+    n = len(positions)
+    # lengths[i] = distance from positions[i] to positions[(i+1) % n]
+    lengths = [
+        math.hypot(
+            positions[(i + 1) % n][0] - positions[i][0],
+            positions[(i + 1) % n][1] - positions[i][1],
+        )
+        for i in range(n)
+    ]
+    total = sum(lengths)
+    cum = [0.0] * (n + 1)
+    for i in range(n):
+        cum[i + 1] = cum[i] + lengths[i]
+
+    step = total / count
+    result: list[tuple[float, float]] = []
+    j = 0
+    for i in range(count):
+        target = i * step
+        while j < n - 1 and cum[j + 1] <= target:
+            j += 1
+        frac = (target - cum[j]) / lengths[j] if lengths[j] > 0 else 0.0
+        p0 = positions[j]
+        p1 = positions[(j + 1) % n]
+        result.append((p0[0] + frac * (p1[0] - p0[0]), p0[1] + frac * (p1[1] - p0[1])))
+    return result
 
 
 def _choose_fork_points(
@@ -291,7 +324,8 @@ def _choose_fork_points(
     forks = []
     for i in range(num_forks):
         base = (i * spacing + random.randint(-2, 2)) % main_count
-        skip = random.randint(6, min(12, spacing - 2))
+        # Shorter skip = shorter chord between fork and merge = closer tiles
+        skip = random.randint(4, min(8, spacing - 2))
         rejoin = (base + skip) % main_count
         forks.append(Fork(
             fork_index=base,
@@ -320,7 +354,7 @@ def _generate_alt_route_positions(
     if dot > 0:
         nx, ny = -nx, -ny
 
-    bulge = length * 0.55 + random.uniform(50, 90)
+    bulge = length * 0.35 + random.uniform(15, 40)
 
     positions = []
     for i in range(count):
