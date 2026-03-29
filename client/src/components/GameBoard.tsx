@@ -478,7 +478,7 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
       const currentHop = Math.floor(anim.progress);
       if (currentHop > lastHop) {
         lastHop = currentHop;
-        if (currentHop < pathCoords.length - 1) Haptics.light();
+        if (currentHop < pathCoords.length - 1) { SFX.tileStep(); Haptics.light(); }
       }
 
       // Follow the moving token with the camera
