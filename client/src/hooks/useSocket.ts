@@ -185,10 +185,7 @@ export function useSocket() {
 
     socket.on('minigame_start', (data: MinigameInfo) => {
       setMinigameInfo(data);
-      // Only participants play the minigame — others stay on the game screen
-      if (playerIdRef.current && data.participants.includes(playerIdRef.current)) {
-        setPhase('minigame');
-      }
+      setPhase('minigame');
     });
 
     socket.on('minigame_results', (data: MinigameResults) => {
