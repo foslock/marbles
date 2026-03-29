@@ -362,12 +362,17 @@ def _assign_tile_types(tiles: dict[int, TileData]) -> None:
 def _separate_major_tiles(tiles: dict[int, TileData]) -> None:
     major_cats = {TileCategory.POSITIVE_MAJOR, TileCategory.NEGATIVE_MAJOR}
     major_ids = [tid for tid, t in tiles.items() if t.category in major_cats]
+    fork_merge_ids = {tid for tid, t in tiles.items() if t.is_fork or t.is_merge}
 
     for mid in major_ids:
         for neighbor_id in tiles[mid].neighbors:
             if tiles[neighbor_id].category in major_cats:
                 for tid, t in tiles.items():
-                    if t.category == TileCategory.NEUTRAL and tid not in major_ids:
+                    if (
+                        t.category == TileCategory.NEUTRAL
+                        and tid not in major_ids
+                        and tid not in fork_merge_ids  # keep fork/merge tiles neutral
+                    ):
                         neighbor_cats = {tiles[n].category for n in t.neighbors}
                         if not (neighbor_cats & major_cats):
                             # Swap
