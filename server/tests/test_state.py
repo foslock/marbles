@@ -126,14 +126,23 @@ class TestSessionManager:
         assert p.role == "spectator"
         assert s.host_id is None  # Spectator doesn't become host
 
-    def test_add_player_max_8(self, session_manager):
+    def test_add_player_max_10(self, session_manager):
         s = session_manager.create_session("fuzzy-dragon")
-        for i in range(8):
+        for i in range(10):
             p = session_manager.add_player(s.id, f"sid-{i}", f"P{i}", "player")
             assert p is not None
-        # 9th player should be rejected
-        p9 = session_manager.add_player(s.id, "sid-9", "P9", "player")
-        assert p9 is None
+        # 11th player should be rejected
+        p11 = session_manager.add_player(s.id, "sid-11", "P11", "player")
+        assert p11 is None
+
+    def test_add_spectator_max_10(self, session_manager):
+        s = session_manager.create_session("fuzzy-dragon")
+        for i in range(10):
+            p = session_manager.add_player(s.id, f"sid-s{i}", f"S{i}", "spectator")
+            assert p is not None
+        # 11th spectator should be rejected
+        s11 = session_manager.add_player(s.id, "sid-s11", "S11", "spectator")
+        assert s11 is None
 
     def test_add_player_invalid_session(self, session_manager):
         result = session_manager.add_player("nonexistent", "sid", "Name", "player")

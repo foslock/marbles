@@ -161,7 +161,10 @@ class SessionManager:
         if role == "player" and session.state != "lobby":
             return None
 
-        if role == "player" and len(session.get_players()) >= 8:
+        if role == "player" and len(session.get_players()) >= 10:
+            return None
+
+        if role == "spectator" and len(session.get_spectators()) >= 10:
             return None
 
         player_id = str(uuid.uuid4())

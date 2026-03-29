@@ -125,8 +125,12 @@ async def join_session(sid, data):
         await sio.emit("error", {"message": "Game already in progress! You can join as a spectator."}, to=sid)
         return
 
-    if role == "player" and len(session.get_players()) >= 8:
-        await sio.emit("error", {"message": "Game is full! Maximum 8 players."}, to=sid)
+    if role == "player" and len(session.get_players()) >= 10:
+        await sio.emit("error", {"message": "Game is full! Maximum 10 players."}, to=sid)
+        return
+
+    if role == "spectator" and len(session.get_spectators()) >= 10:
+        await sio.emit("error", {"message": "Spectator slots full! Maximum 10 spectators."}, to=sid)
         return
 
     player = session_manager.add_player(session.id, sid, name, role)
@@ -255,8 +259,8 @@ async def add_cpu_player(sid, data):
         await sio.emit("error", {"message": "Can only add CPU players in the lobby."}, to=sid)
         return
 
-    if len(session.get_players()) >= 8:
-        await sio.emit("error", {"message": "Game is full! Maximum 8 players."}, to=sid)
+    if len(session.get_players()) >= 10:
+        await sio.emit("error", {"message": "Game is full! Maximum 10 players."}, to=sid)
         return
 
     cpu_number = sum(1 for p in session.get_players() if p.is_cpu) + 1
