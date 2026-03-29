@@ -43,14 +43,15 @@ const COLORS = [
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-/** How many px to shift the world div upward so the tower top sits near
+/** How many px to shift the world div downward so the tower top sits near
  *  TARGET_TOP_SCREEN_Y. Returns 0 until the tower is tall enough. */
 function computeViewOffset(towerLen: number): number {
   // Without offset, tower top (in world coords) = GROUND_WORLD_Y - towerLen * BLOCK_H.
-  // We want that to appear at TARGET_TOP_SCREEN_Y on screen:
-  //   worldY - offset = TARGET_TOP_SCREEN_Y  →  offset = worldY - TARGET_TOP_SCREEN_Y
+  // Once the tower top rises above TARGET_TOP_SCREEN_Y we shift the world DOWN
+  // so the top stays pinned there:
+  //   worldY + offset = TARGET_TOP_SCREEN_Y  →  offset = TARGET_TOP_SCREEN_Y - worldY
   const towerTopWorldY = GROUND_WORLD_Y - towerLen * BLOCK_H;
-  return Math.max(0, towerTopWorldY - TARGET_TOP_SCREEN_Y);
+  return Math.max(0, TARGET_TOP_SCREEN_Y - towerTopWorldY);
 }
 
 /** Screen Y of the TOP edge of a block landing on a towerLen-block tower,
@@ -59,7 +60,7 @@ function landingScreenY(towerLen: number): number {
   const newLen   = towerLen + 1;
   const offset   = computeViewOffset(newLen);
   const worldY   = GROUND_WORLD_Y - newLen * BLOCK_H; // top of new block in world
-  return worldY - offset;
+  return worldY + offset;
   // Once scrolling is active this is always = TARGET_TOP_SCREEN_Y.
   // Before that it falls naturally from ~418 down to TARGET_TOP_SCREEN_Y.
 }
@@ -347,7 +348,7 @@ export function TowerBuilder({ onScoreUpdate, config }: MinigameComponentProps) 
       {/* ── Scrolling world (tower + ground + guide + score flash) ── */}
       <div style={{
         position: 'absolute', inset: 0,
-        transform: `translateY(-${viewOff}px)`,
+        transform: `translateY(${viewOff}px)`,
         transition: 'transform 0.22s ease-out',
         willChange: 'transform',
       }}>
