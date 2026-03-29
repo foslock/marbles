@@ -12,6 +12,7 @@ import random
 import logging
 
 from .effects import process_tile_effect, apply_choice_effect, swap_tile_effect
+from .battle import check_for_battle
 
 logger = logging.getLogger("ltm.cpu")
 
@@ -98,6 +99,26 @@ async def run_cpu_turn(sio, session, player, get_reachable_fn, check_battle_fn):
     # so 0.5 s ensures even a 1-tile hop is partially visible first.
     await asyncio.sleep(0.5)
 
+    # ── Check for battle first — skip tile effect if occupied ────────────────
+    battle = check_for_battle(session, player)
+    if battle:
+        await sio.emit(
+            "tile_effect",
+            {
+                "playerId": player.id,
+                "playerName": player.name,
+                "type": "battle",
+                "category": "neutral",
+                "color": "neutral",
+                "message": battle["message"],
+            },
+            room=session.id,
+        )
+        await asyncio.sleep(2.5)
+        # Go straight to minigame — check_battle_fn will find the battle
+        await check_battle_fn(session, player)
+        return
+
     # ── Process tile effect (swap deferred) ──────────────────────────────────
     effect_result = process_tile_effect(session, player)
 
@@ -106,11 +127,6 @@ async def run_cpu_turn(sio, session, player, get_reachable_fn, check_battle_fn):
         {"playerId": player.id, "playerName": player.name, **effect_result},
         room=session.id,
     )
-
-    # Store pending swap tile but NOT _pending_turn_player_id — CPU handles
-    # its own turn flow, so we don't want turn_complete from human clients
-    # to interfere.
-    session._pending_swap_tile_id = chosen["tileId"]
 
     # ── Handle effects that need a choice ────────────────────────────────────
     if effect_result.get("requiresChoice"):
@@ -132,28 +148,26 @@ async def run_cpu_turn(sio, session, player, get_reachable_fn, check_battle_fn):
     await asyncio.sleep(2.5)
 
     # ── Perform deferred tile swap ───────────────────────────────────────────
-    swap_tile_id = getattr(session, "_pending_swap_tile_id", None)
-    if swap_tile_id is not None and session.board:
-        tile = session.board.tiles.get(swap_tile_id)
+    tile_id = chosen["tileId"]
+    if session.board:
+        tile = session.board.tiles.get(tile_id)
         original_color = tile.color.value if tile else "neutral"
-        session._pending_swap_tile_id = None
-        session._pending_turn_player_id = None
-        board_updates = swap_tile_effect(session, swap_tile_id)
+        board_updates = swap_tile_effect(session, tile_id)
         if board_updates:
             target_tile_id = None
             for update in board_updates:
-                if update["id"] != swap_tile_id and update["color"] != "neutral":
+                if update["id"] != tile_id and update["color"] != "neutral":
                     target_tile_id = update["id"]
                     break
             await sio.emit("tile_swap", {
-                "sourceTileId": swap_tile_id,
+                "sourceTileId": tile_id,
                 "targetTileId": target_tile_id,
                 "color": original_color,
                 "boardUpdates": board_updates,
             }, room=session.id)
             await asyncio.sleep(1.3)  # Wait for swap animation
 
-    # ── Battle check + end turn ──────────────────────────────────────────────
+    # ── End turn (no battle — already checked above) ─────────────────────────
     await check_battle_fn(session, player)
 
 
