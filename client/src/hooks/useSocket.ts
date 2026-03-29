@@ -1,0 +1,208 @@
+import { useEffect, useRef, useState, useCallback } from 'react';
+import { io, Socket } from 'socket.io-client';
+import type {
+  GamePhase,
+  LobbyData,
+  GameState,
+  DiceResult,
+  TileEffect,
+  BattleResult,
+  MinigameInfo,
+  MinigameResults,
+} from '../types/game';
+
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || '';
+
+export function useSocket() {
+  const socketRef = useRef<Socket | null>(null);
+  const [connected, setConnected] = useState(false);
+  const [phase, setPhase] = useState<GamePhase>('home');
+  const [playerId, setPlayerId] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [lobby, setLobby] = useState<LobbyData | null>(null);
+  const [gameState, setGameState] = useState<GameState | null>(null);
+  const [diceResult, setDiceResult] = useState<DiceResult | null>(null);
+  const [tileEffect, setTileEffect] = useState<TileEffect | null>(null);
+  const [battleResult, setBattleResult] = useState<BattleResult | null>(null);
+  const [minigameInfo, setMinigameInfo] = useState<MinigameInfo | null>(null);
+  const [minigameResults, setMinigameResults] = useState<MinigameResults | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [awaitingChoice, setAwaitingChoice] = useState<TileEffect | null>(null);
+
+  useEffect(() => {
+    const socket = io(SOCKET_URL, {
+      transports: ['websocket', 'polling'],
+    });
+    socketRef.current = socket;
+
+    socket.on('connect', () => setConnected(true));
+    socket.on('disconnect', () => setConnected(false));
+    socket.on('error', (data: { message: string }) => setError(data.message));
+
+    socket.on('session_created', (data) => {
+      setPlayerId(data.playerId);
+      setSessionId(data.sessionId);
+      setLobby(data.lobby);
+      setPhase('lobby');
+    });
+
+    socket.on('joined_session', (data) => {
+      setPlayerId(data.playerId);
+      setSessionId(data.sessionId);
+      setLobby(data.lobby);
+      setPhase('lobby');
+    });
+
+    socket.on('lobby_update', (data: LobbyData) => {
+      setLobby(data);
+    });
+
+    socket.on('game_started', (data: GameState) => {
+      setGameState(data);
+      setPhase('playing');
+    });
+
+    socket.on('game_state', (data: GameState) => {
+      setGameState(data);
+      if (data.state === 'playing') setPhase('playing');
+    });
+
+    socket.on('dice_rolled', (data: DiceResult) => {
+      setDiceResult(data);
+    });
+
+    socket.on('player_moved', (data) => {
+      setGameState((prev) => {
+        if (!prev) return prev;
+        const players = { ...prev.players };
+        if (players[data.playerId]) {
+          players[data.playerId] = {
+            ...players[data.playerId],
+            currentTile: data.tileId,
+          };
+        }
+        return { ...prev, players };
+      });
+    });
+
+    socket.on('tile_effect', (data: TileEffect) => {
+      setTileEffect(data);
+    });
+
+    socket.on('awaiting_choice', (data: TileEffect) => {
+      setAwaitingChoice(data);
+    });
+
+    socket.on('choice_resolved', () => {
+      setAwaitingChoice(null);
+    });
+
+    socket.on('battle_result', (data: BattleResult) => {
+      setBattleResult(data);
+    });
+
+    socket.on('minigame_start', (data: MinigameInfo) => {
+      setMinigameInfo(data);
+      setPhase('minigame');
+    });
+
+    socket.on('minigame_results', (data: MinigameResults) => {
+      setMinigameResults(data);
+      setMinigameInfo(null);
+    });
+
+    socket.on('turn_update', (data) => {
+      setGameState((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          currentTurnPlayerId: data.currentTurnPlayerId,
+          currentTurnIndex: data.currentTurnIndex,
+          turnNumber: data.turnNumber,
+          players: data.players,
+        };
+      });
+      setDiceResult(null);
+      setTileEffect(null);
+      setBattleResult(null);
+      setMinigameResults(null);
+      if (minigameInfo) setPhase('playing');
+    });
+
+    socket.on('game_over', (data) => {
+      setGameState((prev) => {
+        if (!prev) return prev;
+        return { ...prev, winnerId: data.winnerId, state: 'finished', players: data.players };
+      });
+      setPhase('finished');
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, []);
+
+  const createSession = useCallback((name: string, targetMarbles: number) => {
+    socketRef.current?.emit('create_session', { name, targetMarbles });
+  }, []);
+
+  const joinSession = useCallback((passphrase: string, name: string, role: string) => {
+    socketRef.current?.emit('join_session', { passphrase, name, role });
+  }, []);
+
+  const startGame = useCallback(() => {
+    socketRef.current?.emit('start_game', { sessionId });
+  }, [sessionId]);
+
+  const rollDice = useCallback((useReroll = false) => {
+    socketRef.current?.emit('roll_dice', { useReroll });
+  }, []);
+
+  const chooseMove = useCallback((tileId: number) => {
+    socketRef.current?.emit('choose_move', { tileId });
+    setDiceResult(null);
+  }, []);
+
+  const makeChoice = useCallback((choiceType: string, targetId: string, amount?: number) => {
+    socketRef.current?.emit('make_choice', { choiceType, targetId, amount });
+  }, []);
+
+  const submitMinigameScore = useCallback((minigameId: string, score: number) => {
+    socketRef.current?.emit('submit_minigame_score', { minigameId, score });
+  }, []);
+
+  const clearError = useCallback(() => setError(null), []);
+  const clearTileEffect = useCallback(() => setTileEffect(null), []);
+  const clearBattleResult = useCallback(() => setBattleResult(null), []);
+  const clearMinigameResults = useCallback(() => {
+    setMinigameResults(null);
+    setPhase('playing');
+  }, []);
+
+  return {
+    connected,
+    phase,
+    playerId,
+    sessionId,
+    lobby,
+    gameState,
+    diceResult,
+    tileEffect,
+    battleResult,
+    minigameInfo,
+    minigameResults,
+    error,
+    awaitingChoice,
+    createSession,
+    joinSession,
+    startGame,
+    rollDice,
+    chooseMove,
+    makeChoice,
+    submitMinigameScore,
+    clearError,
+    clearTileEffect,
+    clearBattleResult,
+    clearMinigameResults,
+  };
+}
