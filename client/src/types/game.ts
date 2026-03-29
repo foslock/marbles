@@ -129,3 +129,10 @@ export interface MinigameResults {
 }
 
 export type GamePhase = 'home' | 'lobby' | 'playing' | 'minigame' | 'finished';
+
+export interface ActivityItem {
+  id: string;
+  message: string;
+  color: 'green' | 'red' | 'gold' | 'neutral';
+  timestamp: number;
+}
