@@ -18,6 +18,7 @@ server/                          # Python backend (FastAPI + Socket.IO)
       passphrase.py              # Two-word passphrase generator
       effects.py                 # Tile effect processing
       battle.py                  # Dice battle system
+      persistence.py             # DB save/load for session recovery
       minigames/
         base.py                  # Minigame definitions, config gen, scoring framework
   requirements.txt
@@ -41,6 +42,7 @@ client/                          # React + TypeScript frontend (Vite)
       BattleOverlay.tsx
       MinigameResultsOverlay.tsx
       GameOverScreen.tsx
+      SpectatorView.tsx          # TV/desktop optimized view for spectators
       ErrorToast.tsx
       minigames/                 # Individual minigame components
         types.ts                 # MinigameComponentProps interface
@@ -51,6 +53,10 @@ client/                          # React + TypeScript frontend (Vite)
         CanvasFill.tsx
         ReactionSnap.tsx
         TargetPop.tsx
+        MemoryFlash.tsx
+        SwipeDodge.tsx
+        SizeMatch.tsx
+        TiltChase.tsx
 ```
 
 ## Adding a New Minigame

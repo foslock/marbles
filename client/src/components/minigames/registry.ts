@@ -13,6 +13,10 @@ import { RhythmPulse } from './RhythmPulse';
 import { CanvasFill } from './CanvasFill';
 import { ReactionSnap } from './ReactionSnap';
 import { TargetPop } from './TargetPop';
+import { MemoryFlash } from './MemoryFlash';
+import { SwipeDodge } from './SwipeDodge';
+import { SizeMatch } from './SizeMatch';
+import { TiltChase } from './TiltChase';
 
 /**
  * Register minigames here. The key must match the `type` field
@@ -25,11 +29,8 @@ export const MINIGAME_REGISTRY: Record<string, ComponentType<MinigameComponentPr
   canvas_fill: CanvasFill,
   reaction: ReactionSnap,
   target_tap: TargetPop,
-
-  // Unimplemented types fall back to TapFrenzy (see MinigameScreen).
-  // As you build new games, add them here:
-  // accelerometer: TiltChase,
-  // size_match: SizeJudge,
-  // memory: MemoryFlash,
-  // dodge: SwipeDodge,
+  memory: MemoryFlash,
+  dodge: SwipeDodge,
+  size_match: SizeMatch,
+  accelerometer: TiltChase,
 };

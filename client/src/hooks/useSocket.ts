@@ -35,7 +35,19 @@ export function useSocket() {
     });
     socketRef.current = socket;
 
-    socket.on('connect', () => setConnected(true));
+    socket.on('connect', () => {
+      setConnected(true);
+      // Auto-reconnect if we have stored session info
+      const savedSession = sessionStorage.getItem('ltm_session');
+      if (savedSession) {
+        try {
+          const { passphrase, playerId: savedPlayerId } = JSON.parse(savedSession);
+          if (passphrase && savedPlayerId) {
+            socket.emit('reconnect_session', { passphrase, playerId: savedPlayerId });
+          }
+        } catch {}
+      }
+    });
     socket.on('disconnect', () => setConnected(false));
     socket.on('error', (data: { message: string }) => setError(data.message));
 
@@ -44,6 +56,11 @@ export function useSocket() {
       setSessionId(data.sessionId);
       setLobby(data.lobby);
       setPhase('lobby');
+      // Persist for reconnection
+      sessionStorage.setItem('ltm_session', JSON.stringify({
+        passphrase: data.lobby.passphrase,
+        playerId: data.playerId,
+      }));
     });
 
     socket.on('joined_session', (data) => {
@@ -51,6 +68,10 @@ export function useSocket() {
       setSessionId(data.sessionId);
       setLobby(data.lobby);
       setPhase('lobby');
+      sessionStorage.setItem('ltm_session', JSON.stringify({
+        passphrase: data.lobby.passphrase,
+        playerId: data.playerId,
+      }));
     });
 
     socket.on('lobby_update', (data: LobbyData) => {
@@ -135,6 +156,7 @@ export function useSocket() {
         return { ...prev, winnerId: data.winnerId, state: 'finished', players: data.players };
       });
       setPhase('finished');
+      sessionStorage.removeItem('ltm_session');
     });
 
     return () => {

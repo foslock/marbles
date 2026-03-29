@@ -1,13 +1,29 @@
+import { useMemo } from 'react';
 import { useSocket } from './hooks/useSocket';
 import { HomeScreen } from './components/HomeScreen';
 import { LobbyScreen } from './components/LobbyScreen';
 import { GameScreen } from './components/GameScreen';
+import { SpectatorView } from './components/SpectatorView';
 import { MinigameScreen } from './components/MinigameScreen';
 import { GameOverScreen } from './components/GameOverScreen';
 import { ErrorToast } from './components/ErrorToast';
 
 export default function App() {
   const socket = useSocket();
+
+  // Determine if current user is a spectator
+  const isSpectator = useMemo(() => {
+    if (!socket.gameState || !socket.playerId) return false;
+    const me = socket.gameState.players[socket.playerId];
+    return me?.role === 'spectator';
+  }, [socket.gameState, socket.playerId]);
+
+  // Also check from lobby data (before game starts, role isn't in gameState yet)
+  const isSpectatorInLobby = useMemo(() => {
+    if (!socket.lobby || !socket.playerId) return false;
+    const me = socket.lobby.players.find((p) => p.id === socket.playerId);
+    return me?.role === 'spectator';
+  }, [socket.lobby, socket.playerId]);
 
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative' }}>
@@ -36,7 +52,18 @@ export default function App() {
         />
       )}
 
-      {socket.phase === 'playing' && socket.gameState && (
+      {/* Spectators get the large TV-optimized view */}
+      {socket.phase === 'playing' && socket.gameState && isSpectator && (
+        <SpectatorView
+          gameState={socket.gameState}
+          tileEffect={socket.tileEffect}
+          battleResult={socket.battleResult}
+          minigameResults={socket.minigameResults}
+        />
+      )}
+
+      {/* Players get the mobile-optimized interactive view */}
+      {socket.phase === 'playing' && socket.gameState && !isSpectator && (
         <GameScreen
           gameState={socket.gameState}
           playerId={socket.playerId}
@@ -54,7 +81,8 @@ export default function App() {
         />
       )}
 
-      {socket.phase === 'minigame' && socket.minigameInfo && (
+      {/* Spectators don't play minigames — they see the spectator view with results */}
+      {socket.phase === 'minigame' && socket.minigameInfo && !isSpectator && !isSpectatorInLobby && (
         <MinigameScreen
           minigameInfo={socket.minigameInfo}
           playerId={socket.playerId}

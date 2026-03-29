@@ -112,6 +112,50 @@ async def join_session(sid, data):
 
 
 @sio.event
+async def reconnect_session(sid, data):
+    """Player reconnects to an in-progress session."""
+    passphrase = data.get("passphrase", "").strip().lower()
+    player_id = data.get("playerId", "")
+
+    session = session_manager.get_session_by_passphrase(passphrase)
+    if not session:
+        await sio.emit("error", {"message": "Session not found."}, to=sid)
+        return
+
+    player = session.players.get(player_id)
+    if not player:
+        await sio.emit("error", {"message": "Player not found in this session."}, to=sid)
+        return
+
+    # Update socket mapping
+    player.sid = sid
+    player.is_connected = True
+    session_manager.sid_to_player[sid] = (session.id, player.id)
+
+    await sio.enter_room(sid, session.id)
+
+    # Send current state based on game phase
+    if session.state == "lobby":
+        await sio.emit("joined_session", {
+            "sessionId": session.id,
+            "playerId": player.id,
+            "lobby": session.to_lobby_dict(),
+        }, to=sid)
+    else:
+        await sio.emit("joined_session", {
+            "sessionId": session.id,
+            "playerId": player.id,
+            "lobby": session.to_lobby_dict(),
+        }, to=sid)
+        await sio.emit("game_state", session.to_game_dict(), to=sid)
+
+    await sio.emit("player_reconnected", {
+        "playerId": player.id,
+        "name": player.name,
+    }, room=session.id, skip_sid=sid)
+
+
+@sio.event
 async def start_game(sid, data):
     """Host starts the game."""
     session_id = data.get("sessionId")
