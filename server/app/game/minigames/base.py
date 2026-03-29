@@ -144,22 +144,26 @@ def select_random_minigame() -> dict:
 
 
 def calculate_rankings(
-    scores: dict[str, int], player_names: dict[str, str]
+    scores: dict[str, int],
+    player_names: dict[str, str],
+    bonus: bool = False,
 ) -> MinigameResult:
-    """Calculate rankings and prizes from minigame scores."""
+    """Calculate rankings and prizes from minigame scores.
+
+    When *bonus* is True (three or more players landed on the same tile)
+    all point prizes are doubled.
+    """
     sorted_players = sorted(scores.items(), key=lambda x: x[1], reverse=True)
 
     marble_bonus = random.random() < 0.10  # 10% chance
 
-    point_prizes = [50, 25, 10]  # 1st, 2nd, 3rd
+    multiplier = 2 if bonus else 1
+    point_prizes = [50 * multiplier, 25 * multiplier, 10 * multiplier]  # 1st, 2nd, 3rd
 
     rankings = []
     for i, (player_id, score) in enumerate(sorted_players):
         rank = i + 1
-        if rank <= 3:
-            prize_points = point_prizes[i] if i < len(point_prizes) else 0
-        else:
-            prize_points = 0
+        prize_points = point_prizes[i] if rank <= 3 and i < len(point_prizes) else 0
 
         rankings.append({
             "id": player_id,

@@ -8,7 +8,7 @@ import socketio
 from .game.state import session_manager, PlayerState
 from .game.passphrase import generate_passphrase
 from .game.effects import process_tile_effect, apply_choice_effect
-from .game.battle import check_for_battle, resolve_dice_battle
+from .game.battle import check_for_battle
 from .game.minigames.base import (
     select_random_minigame,
     calculate_rankings,
@@ -459,23 +459,27 @@ async def submit_minigame_score(sid, data):
     # Check if all participants have submitted
     if set(session._minigame_scores.keys()) >= set(session._minigame_participants):
         player_names = {pid: session.players[pid].name for pid in session._minigame_scores}
-        result = calculate_rankings(session._minigame_scores, player_names)
+        bonus = getattr(session, '_minigame_bonus', False)
+        result = calculate_rankings(session._minigame_scores, player_names, bonus=bonus)
         apply_minigame_prizes(session, result)
 
         await sio.emit("minigame_results", {
             "rankings": result.rankings,
             "marbleBonus": result.marble_bonus,
+            "bonus": bonus,
         }, room=session_id)
 
         await _persist_event(session_id, session.turn_number, "minigame", None, {
             "minigameId": minigame_id,
             "rankings": result.rankings,
             "marbleBonus": result.marble_bonus,
+            "bonus": bonus,
         })
 
         # Clean up
         session._minigame_scores = {}
         session._minigame_participants = []
+        session._minigame_bonus = False
 
         # End turn
         _end_turn(session)
@@ -483,50 +487,46 @@ async def submit_minigame_score(sid, data):
 
 
 async def _check_battle_and_end_turn(session, player):
-    """Check for battles after movement, then end turn."""
+    """Check for tile collisions triggering a minigame, then end turn."""
     battle = check_for_battle(session, player)
 
     if battle:
-        if battle["type"] == "minigame":
-            minigame = select_random_minigame()
-            session._minigame_participants = battle["participants"]
-            session._minigame_scores = {}
+        minigame = select_random_minigame()
+        bonus = battle.get("bonus", False)
+        session._minigame_participants = battle["participants"]
+        session._minigame_scores = {}
+        session._minigame_bonus = bonus
 
-            await sio.emit("minigame_start", {
-                "minigame": minigame,
-                "participants": battle["participants"],
-                "message": battle["message"],
+        await sio.emit("minigame_start", {
+            "minigame": minigame,
+            "participants": battle["participants"],
+            "message": battle["message"],
+            "bonus": bonus,
+        }, room=session.id)
+
+        # Auto-submit scores for any CPU participants immediately
+        for pid in battle["participants"]:
+            p = session.players.get(pid)
+            if p and p.is_cpu:
+                session._minigame_scores[pid] = cpu_minigame_score(minigame["type"])
+
+        # If all participants are CPU, resolve immediately
+        if set(session._minigame_scores.keys()) >= set(session._minigame_participants):
+            player_names = {pid: session.players[pid].name for pid in session._minigame_scores}
+            result = calculate_rankings(session._minigame_scores, player_names, bonus=bonus)
+            apply_minigame_prizes(session, result)
+            await sio.emit("minigame_results", {
+                "rankings": result.rankings,
+                "marbleBonus": result.marble_bonus,
+                "bonus": bonus,
             }, room=session.id)
+            session._minigame_scores = {}
+            session._minigame_participants = []
+            session._minigame_bonus = False
+            _end_turn(session)
+            await _send_turn_update(session)
 
-            # Auto-submit scores for any CPU participants immediately
-            for pid in battle["participants"]:
-                p = session.players.get(pid)
-                if p and p.is_cpu:
-                    session._minigame_scores[pid] = cpu_minigame_score(minigame["type"])
-
-            # If all participants are CPU, resolve immediately
-            if set(session._minigame_scores.keys()) >= set(session._minigame_participants):
-                player_names = {pid: session.players[pid].name for pid in session._minigame_scores}
-                result = calculate_rankings(session._minigame_scores, player_names)
-                apply_minigame_prizes(session, result)
-                await sio.emit("minigame_results", {
-                    "rankings": result.rankings,
-                    "marbleBonus": result.marble_bonus,
-                }, room=session.id)
-                session._minigame_scores = {}
-                session._minigame_participants = []
-                _end_turn(session)
-                await _send_turn_update(session)
-
-            return  # Turn ends after minigame completes
-
-        elif battle["type"] == "dice_battle":
-            result = resolve_dice_battle(
-                session, battle["participants"][0], battle["participants"][1]
-            )
-            await sio.emit("battle_result", result, room=session.id)
-
-            await _persist_event(session.id, session.turn_number, "battle", player.id, result)
+        return  # Turn ends after minigame completes
 
     # Check for winner
     winner = session.check_winner()

@@ -85,12 +85,10 @@ export default function App() {
         <SpectatorView
           gameState={socket.gameState}
           tileEffect={socket.tileEffect}
-          battleResult={socket.battleResult}
           minigameResults={socket.minigameResults}
           moveAnimation={socket.moveAnimation}
           onClearMoveAnimation={socket.clearMoveAnimation}
           onClearTileEffect={socket.clearTileEffect}
-          onClearBattleResult={socket.clearBattleResult}
           onClearMinigameResults={socket.clearMinigameResults}
         />
       )}
@@ -102,7 +100,6 @@ export default function App() {
           playerId={socket.playerId}
           diceResult={socket.diceResult}
           tileEffect={socket.tileEffect}
-          battleResult={socket.battleResult}
           minigameResults={socket.minigameResults}
           awaitingChoice={socket.awaitingChoice}
           moveAnimation={socket.moveAnimation}
@@ -110,7 +107,6 @@ export default function App() {
           onChooseMove={socket.chooseMove}
           onMakeChoice={socket.makeChoice}
           onClearTileEffect={socket.clearTileEffect}
-          onClearBattleResult={socket.clearBattleResult}
           onClearMinigameResults={socket.clearMinigameResults}
           onClearMoveAnimation={socket.clearMoveAnimation}
           onEndGame={socket.endGame}

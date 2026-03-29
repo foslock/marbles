@@ -77,6 +77,9 @@ export function MinigameScreen({ minigameInfo, playerId, onSubmitScore }: Props)
     <div style={styles.container}>
       {phase === 'countdown' && (
         <div style={styles.countdownContainer}>
+          {minigameInfo.bonus && (
+            <div style={styles.bonusBanner}>⚡ BONUS ROUND — 2× POINTS! ⚡</div>
+          )}
           <h2 style={styles.minigameName}>{minigame.name}</h2>
           <p style={styles.instructions}>{minigame.instructions}</p>
           <div style={styles.countdownNumber}>
@@ -130,6 +133,17 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'center',
     padding: '20px',
+  },
+  bonusBanner: {
+    background: 'rgba(243, 156, 18, 0.2)',
+    border: '2px solid #f39c12',
+    color: '#f39c12',
+    padding: '8px 20px',
+    borderRadius: '10px',
+    fontSize: '15px',
+    fontWeight: 800,
+    marginBottom: '16px',
+    letterSpacing: '0.5px',
   },
   minigameName: {
     color: '#f39c12',

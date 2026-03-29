@@ -6,7 +6,6 @@ import type {
   GameState,
   DiceResult,
   TileEffect,
-  BattleResult,
   MinigameInfo,
   MinigameResults,
 } from '../types/game';
@@ -27,7 +26,6 @@ export function useSocket() {
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [diceResult, setDiceResult] = useState<DiceResult | null>(null);
   const [tileEffect, setTileEffect] = useState<TileEffect | null>(null);
-  const [battleResult, setBattleResult] = useState<BattleResult | null>(null);
   const [minigameInfo, setMinigameInfo] = useState<MinigameInfo | null>(null);
   const [minigameResults, setMinigameResults] = useState<MinigameResults | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -160,12 +158,6 @@ export function useSocket() {
       setAwaitingChoice(null);
     });
 
-    socket.on('battle_result', (data: BattleResult) => {
-      setBattleResult(data);
-      SFX.battleStart();
-      Haptics.heavy();
-    });
-
     socket.on('minigame_start', (data: MinigameInfo) => {
       setMinigameInfo(data);
       setPhase('minigame');
@@ -192,7 +184,7 @@ export function useSocket() {
         };
       });
       setDiceResult(null);
-      // Do NOT clear tileEffect, battleResult, or minigameResults here.
+      // Do NOT clear tileEffect or minigameResults here.
       // turn_update arrives almost immediately after these events, before the
       // player has seen the overlay. Each overlay auto-dismisses via its own
       // timer, or the player taps to close it.
@@ -219,7 +211,6 @@ export function useSocket() {
       setGameState(null);
       setDiceResult(null);
       setTileEffect(null);
-      setBattleResult(null);
       setMinigameInfo(null);
       setMinigameResults(null);
       setAwaitingChoice(null);
@@ -269,7 +260,6 @@ export function useSocket() {
 
   const clearError = useCallback(() => setError(null), []);
   const clearTileEffect = useCallback(() => setTileEffect(null), []);
-  const clearBattleResult = useCallback(() => setBattleResult(null), []);
   const clearMinigameResults = useCallback(() => {
     setMinigameResults(null);
     setPhase('playing');
@@ -293,7 +283,6 @@ export function useSocket() {
     gameState,
     diceResult,
     tileEffect,
-    battleResult,
     minigameInfo,
     minigameResults,
     error,
@@ -308,7 +297,6 @@ export function useSocket() {
     submitMinigameScore,
     clearError,
     clearTileEffect,
-    clearBattleResult,
     clearMinigameResults,
     clearMoveAnimation,
     endGame,
