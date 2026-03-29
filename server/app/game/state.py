@@ -93,6 +93,7 @@ class GameSession:
     def to_game_dict(self) -> dict:
         return {
             "sessionId": self.id,
+            "hostId": self.host_id,
             "state": self.state,
             "targetMarbles": self.target_marbles,
             "board": self.board.to_dict() if self.board else None,
@@ -223,6 +224,22 @@ class SessionManager:
         session.turn_number = 1
 
         return session
+
+    def delete_session(self, session_id: str) -> list[str]:
+        """Remove a session and return the SIDs of all its players for disconnection."""
+        session = self.sessions.pop(session_id, None)
+        if not session:
+            return []
+
+        self.passphrase_map.pop(session.passphrase, None)
+
+        sids = []
+        for player in session.players.values():
+            if player.sid:
+                self.sid_to_player.pop(player.sid, None)
+                sids.append(player.sid)
+
+        return sids
 
 
 # Global singleton

@@ -30,6 +30,7 @@ interface Props {
   onClearBattleResult: () => void;
   onClearMinigameResults: () => void;
   onClearMoveAnimation: () => void;
+  onEndGame: () => void;
 }
 
 export function GameScreen({
@@ -48,6 +49,7 @@ export function GameScreen({
   onClearBattleResult,
   onClearMinigameResults,
   onClearMoveAnimation,
+  onEndGame,
 }: Props) {
   const [showScoreboard, setShowScoreboard] = useState(false);
   const isMyTurn = gameState.currentTurnPlayerId === playerId;
@@ -97,6 +99,8 @@ export function GameScreen({
             players={sortedPlayers}
             targetMarbles={gameState.targetMarbles}
             currentPlayerId={playerId}
+            hostId={gameState.hostId}
+            onEndGame={onEndGame}
           />
         ) : (
           <GameBoard

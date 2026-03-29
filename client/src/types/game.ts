@@ -59,6 +59,7 @@ export interface LobbyData {
 
 export interface GameState {
   sessionId: string;
+  hostId: string | null;
   state: string;
   targetMarbles: number;
   board: BoardData | null;
