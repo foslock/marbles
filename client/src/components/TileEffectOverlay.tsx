@@ -37,7 +37,7 @@ const AUTO_DISMISS_MS = 10000;
 export function TileEffectOverlay({ effect, playerToken, onClose }: Props) {
   const [visible, setVisible] = useState(false);
   const [canDismiss, setCanDismiss] = useState(false);
-  const [progress, setProgress] = useState(0);
+  const [progressStarted, setProgressStarted] = useState(false);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
 
@@ -52,27 +52,20 @@ export function TileEffectOverlay({ effect, playerToken, onClose }: Props) {
       SFX.neutralEffect();
       Haptics.light();
     }
-    // Trigger entrance animation
-    requestAnimationFrame(() => setVisible(true));
+    // Trigger entrance animation on next frame
+    requestAnimationFrame(() => {
+      setVisible(true);
+      // Start progress bar shrink in the same frame so it begins immediately
+      setProgressStarted(true);
+    });
   }, [effect.color]);
 
   useEffect(() => {
     const unlockTimer = setTimeout(() => setCanDismiss(true), MIN_DISPLAY_MS);
     const autoTimer = setTimeout(() => onCloseRef.current(), AUTO_DISMISS_MS);
-
-    // Animate progress bar
-    const start = Date.now();
-    const tick = () => {
-      const elapsed = Date.now() - start;
-      setProgress(1 - Math.min(elapsed / AUTO_DISMISS_MS, 1));
-      if (elapsed < AUTO_DISMISS_MS) rafId = requestAnimationFrame(tick);
-    };
-    let rafId = requestAnimationFrame(tick);
-
     return () => {
       clearTimeout(unlockTimer);
       clearTimeout(autoTimer);
-      cancelAnimationFrame(rafId);
     };
   }, []);
 
@@ -135,7 +128,11 @@ export function TileEffectOverlay({ effect, playerToken, onClose }: Props) {
         ) : null}
         <span style={styles.tap}>{canDismiss ? 'Tap to dismiss' : '...'}</span>
         <div style={styles.progressTrack}>
-          <div style={{ ...styles.progressFill, width: `${progress * 100}%` }} />
+          <div style={{
+            ...styles.progressFill,
+            transform: progressStarted ? 'scaleX(0)' : 'scaleX(1)',
+            transition: progressStarted ? `transform ${AUTO_DISMISS_MS}ms linear` : 'none',
+          }} />
         </div>
       </div>
     </div>
@@ -239,8 +236,9 @@ const styles: Record<string, React.CSSProperties> = {
   },
   progressFill: {
     height: '100%',
+    width: '100%',
     background: '#5a6a8a',
     borderRadius: '2px',
-    transition: 'width 0.1s linear',
+    transformOrigin: 'left',
   },
 };
