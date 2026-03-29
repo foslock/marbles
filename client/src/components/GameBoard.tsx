@@ -420,7 +420,7 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
     // Draw tile swap animation — prominent bubble traveling between tiles
     const swapAnim = swapAnimRef.current;
     if (swapAnim) {
-      const SWAP_DURATION = 2000;
+      const SWAP_DURATION = 3000;
       const elapsed = performance.now() - swapAnim.startTime;
       const t = Math.min(elapsed / SWAP_DURATION, 1);
 
@@ -531,7 +531,7 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
     // Draw steal animation — icon arcing from source to target player
     const stealAnim = stealAnimRef.current;
     if (stealAnim && board) {
-      const STEAL_DURATION = 900;
+      const STEAL_DURATION = 1400;
       const elapsed = performance.now() - stealAnim.startTime;
       const t = Math.min(elapsed / STEAL_DURATION, 1);
 
@@ -731,7 +731,7 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
   // Tile swap animation — camera follows the effect bubble
   useEffect(() => {
     if (!tileSwapAnimation || !board) return;
-    const SWAP_DURATION = 2000; // longer for camera panning
+    const SWAP_DURATION = 3000; // longer for camera panning
 
     swapAnimRef.current = {
       sourceTileId: tileSwapAnimation.sourceTileId,
@@ -780,7 +780,7 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
   // Steal animation
   useEffect(() => {
     if (!stealAnimation || !board) return;
-    const STEAL_DURATION = 900;
+    const STEAL_DURATION = 1400;
 
     stealAnimRef.current = {
       ...stealAnimation,
