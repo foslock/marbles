@@ -21,6 +21,7 @@ import { TowerBuilder } from './TowerBuilder';
 import { ColorSort } from './ColorSort';
 import { MarbleRunner } from './MarbleRunner';
 import { LightSwitch } from './LightSwitch';
+import { PumpIt } from './PumpIt';
 
 /**
  * Register minigames here. The key must match the `type` field
@@ -41,4 +42,5 @@ export const MINIGAME_REGISTRY: Record<string, ComponentType<MinigameComponentPr
   color_sort: ColorSort,
   marble_runner: MarbleRunner,
   light_switch: LightSwitch,
+  pump_it: PumpIt,
 };
