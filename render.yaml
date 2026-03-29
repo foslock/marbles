@@ -12,7 +12,7 @@ services:
           name: ltm-db
           property: connectionString
       - key: LTM_CORS_ORIGINS
-        value: https://ltm-client.onrender.com
+        value: '["https://ltm-client.onrender.com"]'
     plan: starter
 
   - type: web
