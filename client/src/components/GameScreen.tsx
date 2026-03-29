@@ -103,8 +103,10 @@ export function GameScreen({
   }, []);
 
   // ── Tile effect buffering ────────────────────────────────────────────────
-  // Hold incoming tile effects until the move animation + landing completes,
-  // so the popup never appears while the token is still flying.
+  // Hold incoming tile effects until the move animation completes, so the
+  // popup never appears while the token is still flying.  We check the raw
+  // `moveAnimation` prop (set in the same batched render as tileEffect) and
+  // also `activeMoveAnimation` (the dice-settle-gated version).
   const effectPendingRef = useRef<TileEffect | null>(null);
   const [effectToShow, setEffectToShow] = useState<TileEffect | null>(null);
 
@@ -114,16 +116,15 @@ export function GameScreen({
       setEffectToShow(null);
       return;
     }
-    if (activeMoveAnimation) {
+    // Check both raw and gated move animation — if either is active, buffer.
+    if (moveAnimation || activeMoveAnimation) {
       effectPendingRef.current = tileEffect;
     } else {
       setEffectToShow(tileEffect);
     }
-  }, [tileEffect, activeMoveAnimation]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [tileEffect, moveAnimation, activeMoveAnimation]);
 
   // ── Choice buffering ─────────────────────────────────────────────────────
-  // Same pattern as above — hold the choice prompt until animation finishes
-  // so it never appears before the player has landed on the tile.
   const choicePendingRef = useRef<TileEffect | null>(null);
   const [choiceToShow, setChoiceToShow] = useState<TileEffect | null>(null);
 
@@ -133,12 +134,12 @@ export function GameScreen({
       setChoiceToShow(null);
       return;
     }
-    if (activeMoveAnimation) {
+    if (moveAnimation || activeMoveAnimation) {
       choicePendingRef.current = awaitingChoice;
     } else {
       setChoiceToShow(awaitingChoice);
     }
-  }, [awaitingChoice]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [awaitingChoice, moveAnimation, activeMoveAnimation]);
 
   const handleAnimationComplete = useCallback(() => {
     onClearMoveAnimation();
