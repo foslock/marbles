@@ -1,11 +1,20 @@
 import { useRef, useEffect, useCallback, useState } from 'react';
 import type { BoardData, PlayerState } from '../types/game';
+import { SFX } from '../utils/sound';
+import { Haptics } from '../utils/haptics';
+
+export interface MoveAnimation {
+  playerId: string;
+  path: number[]; // tile IDs to traverse
+}
 
 interface Props {
   board: BoardData | null;
   players: PlayerState[];
   reachableTiles: { tileId: number; path: number[] }[];
   onTileClick?: (tileId: number) => void;
+  moveAnimation?: MoveAnimation | null;
+  onAnimationComplete?: () => void;
 }
 
 const TILE_RADIUS = 18;
@@ -17,12 +26,21 @@ const TILE_COLORS = {
 const REACHABLE_COLOR = '#f39c12';
 const EDGE_COLOR = '#1a3a5c';
 
-export function GameBoard({ board, players, reachableTiles, onTileClick }: Props) {
+export function GameBoard({ board, players, reachableTiles, onTileClick, moveAnimation, onAnimationComplete }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [scale, setScale] = useState(1);
   const dragRef = useRef({ dragging: false, startX: 0, startY: 0, offsetX: 0, offsetY: 0 });
+
+  // Animation state
+  const animRef = useRef<{
+    playerId: string;
+    path: { x: number; y: number }[];
+    progress: number; // 0 to path.length - 1
+    startTime: number;
+  } | null>(null);
+  const rafRef = useRef<number>(0);
 
   const reachableSet = new Set(reachableTiles.map((r) => r.tileId));
 
@@ -76,9 +94,18 @@ export function GameBoard({ board, players, reachableTiles, onTileClick }: Props
     }
 
     // Draw tiles
+    const pulse = Math.sin(Date.now() / 400) * 0.3 + 0.7; // 0.4 to 1.0
     for (const tile of tiles) {
       const isReachable = reachableSet.has(tile.id);
       const baseColor = TILE_COLORS[tile.color] || TILE_COLORS.neutral;
+
+      // Glow ring for reachable tiles
+      if (isReachable) {
+        ctx.beginPath();
+        ctx.arc(tile.x, tile.y, TILE_RADIUS + 6, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(243, 156, 18, ${pulse * 0.3})`;
+        ctx.fill();
+      }
 
       ctx.beginPath();
       ctx.arc(tile.x, tile.y, TILE_RADIUS, 0, Math.PI * 2);
@@ -86,7 +113,7 @@ export function GameBoard({ board, players, reachableTiles, onTileClick }: Props
       ctx.fill();
 
       if (isReachable) {
-        ctx.strokeStyle = '#fff';
+        ctx.strokeStyle = `rgba(255, 255, 255, ${pulse})`;
         ctx.lineWidth = 3;
         ctx.stroke();
       }
@@ -104,7 +131,10 @@ export function GameBoard({ board, players, reachableTiles, onTileClick }: Props
 
     // Draw player tokens
     const tilePlayerMap: Record<number, PlayerState[]> = {};
+    const animating = animRef.current;
     for (const p of players) {
+      // Skip animated player from tile map — we'll draw them separately
+      if (animating && p.id === animating.playerId) continue;
       if (!tilePlayerMap[p.currentTile]) tilePlayerMap[p.currentTile] = [];
       tilePlayerMap[p.currentTile].push(p);
     }
@@ -119,21 +149,28 @@ export function GameBoard({ board, players, reachableTiles, onTileClick }: Props
         const spread = tilePlayers.length > 1 ? 14 : 0;
         const px = tile.x + Math.cos(angle) * spread;
         const py = tile.y + Math.sin(angle) * spread;
+        _drawToken(ctx, px, py, p);
+      }
+    }
 
-        // Token circle
+    // Draw animated player at interpolated position
+    if (animating && animating.path.length > 0) {
+      const animPlayer = players.find((p) => p.id === animating.playerId);
+      if (animPlayer) {
+        const segIndex = Math.floor(animating.progress);
+        const segFrac = animating.progress - segIndex;
+        const from = animating.path[Math.min(segIndex, animating.path.length - 1)];
+        const to = animating.path[Math.min(segIndex + 1, animating.path.length - 1)];
+        const ax = from.x + (to.x - from.x) * segFrac;
+        const ay = from.y + (to.y - from.y) * segFrac;
+
+        // Trail effect
         ctx.beginPath();
-        ctx.arc(px, py, 10, 0, Math.PI * 2);
-        ctx.fillStyle = p.token?.color || '#fff';
+        ctx.arc(ax, ay, 14, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(243, 156, 18, 0.3)';
         ctx.fill();
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 2;
-        ctx.stroke();
 
-        // Emoji
-        ctx.font = '12px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(p.token?.emoji || '?', px, py + 1);
+        _drawToken(ctx, ax, ay, animPlayer);
       }
     }
 
@@ -144,8 +181,82 @@ export function GameBoard({ board, players, reachableTiles, onTileClick }: Props
     draw();
     const handleResize = () => draw();
     window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [draw]);
+
+    // Animate pulse on reachable tiles
+    let pulseRaf = 0;
+    if (reachableTiles.length > 0) {
+      const pulseTick = () => {
+        draw();
+        pulseRaf = requestAnimationFrame(pulseTick);
+      };
+      pulseRaf = requestAnimationFrame(pulseTick);
+    }
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      if (pulseRaf) cancelAnimationFrame(pulseRaf);
+    };
+  }, [draw, reachableTiles.length]);
+
+  // Start animation when moveAnimation prop changes
+  useEffect(() => {
+    if (!moveAnimation || !board) return;
+    const pathCoords = moveAnimation.path
+      .map((tileId) => board.tiles[String(tileId)])
+      .filter(Boolean)
+      .map((t) => ({ x: t.x, y: t.y }));
+
+    if (pathCoords.length < 2) return;
+
+    animRef.current = {
+      playerId: moveAnimation.playerId,
+      path: pathCoords,
+      progress: 0,
+      startTime: performance.now(),
+    };
+
+    const SPEED = 200; // ms per tile hop
+    const totalDuration = (pathCoords.length - 1) * SPEED;
+
+    let lastHop = -1;
+    const tick = (now: number) => {
+      const anim = animRef.current;
+      if (!anim) return;
+
+      const elapsed = now - anim.startTime;
+      anim.progress = Math.min(elapsed / SPEED, pathCoords.length - 1);
+
+      // Play hop sound at each tile
+      const currentHop = Math.floor(anim.progress);
+      if (currentHop > lastHop) {
+        lastHop = currentHop;
+        if (currentHop < pathCoords.length - 1) {
+          Haptics.light();
+        }
+      }
+
+      draw();
+
+      if (elapsed >= totalDuration) {
+        // Animation complete
+        SFX.tileLand();
+        Haptics.medium();
+        animRef.current = null;
+        draw();
+        onAnimationComplete?.();
+        return;
+      }
+
+      rafRef.current = requestAnimationFrame(tick);
+    };
+
+    rafRef.current = requestAnimationFrame(tick);
+
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      animRef.current = null;
+    };
+  }, [moveAnimation, board, draw, onAnimationComplete]);
 
   // Touch/mouse handlers for pan
   const handlePointerDown = (e: React.PointerEvent) => {
@@ -236,6 +347,20 @@ export function GameBoard({ board, players, reachableTiles, onTileClick }: Props
       </div>
     </div>
   );
+}
+
+function _drawToken(ctx: CanvasRenderingContext2D, px: number, py: number, p: PlayerState) {
+  ctx.beginPath();
+  ctx.arc(px, py, 10, 0, Math.PI * 2);
+  ctx.fillStyle = p.token?.color || '#fff';
+  ctx.fill();
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  ctx.font = '12px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(p.token?.emoji || '?', px, py + 1);
 }
 
 const styles: Record<string, React.CSSProperties> = {

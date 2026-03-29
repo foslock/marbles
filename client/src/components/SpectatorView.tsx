@@ -1,12 +1,14 @@
 import { useMemo } from 'react';
 import type { GameState, MinigameResults, BattleResult, TileEffect } from '../types/game';
-import { GameBoard } from './GameBoard';
+import { GameBoard, type MoveAnimation } from './GameBoard';
 
 interface Props {
   gameState: GameState;
   tileEffect: TileEffect | null;
   battleResult: BattleResult | null;
   minigameResults: MinigameResults | null;
+  moveAnimation: MoveAnimation | null;
+  onClearMoveAnimation: () => void;
 }
 
 /**
@@ -14,7 +16,7 @@ interface Props {
  * Shows the board prominently with a persistent sidebar scoreboard.
  * Designed to be displayed via AirPlay/Chromecast on a shared screen.
  */
-export function SpectatorView({ gameState, tileEffect, battleResult, minigameResults }: Props) {
+export function SpectatorView({ gameState, tileEffect, battleResult, minigameResults, moveAnimation, onClearMoveAnimation }: Props) {
   const sortedPlayers = useMemo(() => {
     return Object.values(gameState.players)
       .filter((p) => p.role === 'player')
@@ -36,6 +38,8 @@ export function SpectatorView({ gameState, tileEffect, battleResult, minigameRes
           board={gameState.board}
           players={sortedPlayers}
           reachableTiles={[]}
+          moveAnimation={moveAnimation}
+          onAnimationComplete={onClearMoveAnimation}
         />
 
         {/* Turn banner */}
