@@ -106,6 +106,7 @@ export function GameScreen({
             onTileClick={needsToChooseMove ? handleChooseMove : undefined}
             moveAnimation={moveAnimation}
             onAnimationComplete={onClearMoveAnimation}
+            myPlayerId={playerId}
           />
         )}
       </div>
@@ -117,12 +118,13 @@ export function GameScreen({
 
       {/* Action area */}
       <div style={styles.actionArea}>
-        {isMyTurn && !diceResult && !tileEffect && !battleResult && (
+        {isMyTurn && !tileEffect && !battleResult && (
           <DiceRoller
             onRoll={onRollDice}
             hasRerolls={(myPlayer?.modifiers.rerolls ?? 0) > 0}
             hasDoubleDice={(myPlayer?.modifiers.double_dice ?? 0) > 0}
             hasWorstDice={(myPlayer?.modifiers.worst_dice ?? 0) > 0}
+            rolledValue={diceResult?.playerId === playerId ? diceResult.roll : null}
           />
         )}
 

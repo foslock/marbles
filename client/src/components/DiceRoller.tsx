@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { SFX } from '../utils/sound';
 import { Haptics } from '../utils/haptics';
 
@@ -7,17 +7,29 @@ interface Props {
   hasRerolls: boolean;
   hasDoubleDice: boolean;
   hasWorstDice: boolean;
+  rolledValue?: number | null;
 }
 
-export function DiceRoller({ onRoll, hasRerolls, hasDoubleDice, hasWorstDice }: Props) {
+export function DiceRoller({ onRoll, hasRerolls, hasDoubleDice, hasWorstDice, rolledValue }: Props) {
   const [rolling, setRolling] = useState(false);
   const [displayFace, setDisplayFace] = useState(1);
+  const [settled, setSettled] = useState(false);
+
+  // When the actual server roll arrives, snap the die face to the real result
+  useEffect(() => {
+    if (rolledValue != null && rolledValue >= 1 && rolledValue <= 6) {
+      setDisplayFace(rolledValue);
+      setSettled(true);
+    } else {
+      setSettled(false);
+    }
+  }, [rolledValue]);
 
   const handleRoll = (useReroll = false) => {
     setRolling(true);
+    setSettled(false);
     SFX.diceRoll();
     Haptics.diceRoll();
-    // Quick animation
     let count = 0;
     const interval = setInterval(() => {
       setDisplayFace(Math.floor(Math.random() * 6) + 1);
@@ -45,14 +57,19 @@ export function DiceRoller({ onRoll, hasRerolls, hasDoubleDice, hasWorstDice }: 
         style={{
           ...styles.diceButton,
           ...(rolling ? styles.diceButtonRolling : {}),
+          ...(settled ? styles.diceButtonSettled : {}),
         }}
         onClick={() => handleRoll(false)}
-        disabled={rolling}
+        disabled={rolling || settled}
       >
         <span style={styles.diceFace}>{diceFaces[displayFace - 1]}</span>
-        <span style={styles.rollText}>
-          {rolling ? 'Rolling...' : 'Roll!'}
-        </span>
+        {settled ? (
+          <span style={styles.rolledNumber}>{rolledValue}</span>
+        ) : (
+          <span style={styles.rollText}>
+            {rolling ? 'Rolling...' : 'Roll!'}
+          </span>
+        )}
       </button>
 
       {hasRerolls && (
@@ -107,6 +124,10 @@ const styles: Record<string, React.CSSProperties> = {
     animation: 'shake 0.1s infinite',
     borderColor: '#e74c3c',
   },
+  diceButtonSettled: {
+    borderColor: '#2ecc71',
+    boxShadow: '0 0 12px rgba(46, 204, 113, 0.5)',
+  },
   diceFace: {
     fontSize: '36px',
   },
@@ -114,6 +135,11 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '12px',
     color: '#f39c12',
     fontWeight: 600,
+  },
+  rolledNumber: {
+    fontSize: '18px',
+    fontWeight: 800,
+    color: '#2ecc71',
   },
   rerollBtn: {
     padding: '6px 16px',

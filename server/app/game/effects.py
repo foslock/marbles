@@ -2,7 +2,7 @@
 
 import random
 from .state import GameSession, PlayerState
-from ..board.generator import FORTUNE_COOKIES, TileCategory, TILE_EFFECTS
+from ..board.generator import FORTUNE_COOKIES, TileCategory, TileColor, TILE_EFFECTS
 
 
 POINTS_PER_MARBLE = 100
@@ -204,18 +204,62 @@ def _get_other_player_options(session: GameSession, player: PlayerState) -> list
 
 
 def _swap_tile_effect(session: GameSession, tile_id: int):
-    """Swap a revealed tile's effect with another unrevealed tile of the same category type."""
+    """Move a positive/negative tile's effect to a random unoccupied neutral tile.
+
+    The original tile becomes neutral. The target neutral tile gets a randomly
+    chosen effect from the same positive/negative group, keeping the board
+    unpredictable while preserving the overall balance of tile types.
+    Neutral fortune-cookie tiles are left untouched.
+    """
     if not session.board:
         return
 
     tile = session.board.tiles[tile_id]
-    same_color_tiles = [
+
+    # Only relocate positive/negative tiles; neutral tiles stay as-is
+    if tile.color == TileColor.NEUTRAL:
+        return
+
+    # Identify occupied tile IDs so we don't hide an effect under a player
+    occupied_tiles = {p.current_tile for p in session.get_players()}
+
+    # Find unoccupied, unrevealed neutral tiles to receive the relocated effect
+    neutral_targets = [
         t for t in session.board.tiles.values()
-        if t.color == tile.color and t.id != tile_id and not t.is_revealed
+        if t.color == TileColor.NEUTRAL
+        and t.id != tile_id
+        and not t.is_revealed
+        and t.id not in occupied_tiles
     ]
 
-    if same_color_tiles:
-        swap_target = random.choice(same_color_tiles)
-        tile.effect, swap_target.effect = swap_target.effect, tile.effect
-        tile.category, swap_target.category = swap_target.category, tile.category
-        tile.is_revealed = False
+    if not neutral_targets:
+        return
+
+    target = random.choice(neutral_targets)
+
+    # Pick a random category from the same positive/negative group
+    if tile.color == TileColor.GREEN:
+        candidates = [
+            TileCategory.POSITIVE_MINOR,
+            TileCategory.POSITIVE_MEDIUM,
+            TileCategory.POSITIVE_MAJOR,
+        ]
+    else:
+        candidates = [
+            TileCategory.NEGATIVE_MINOR,
+            TileCategory.NEGATIVE_MEDIUM,
+            TileCategory.NEGATIVE_MAJOR,
+        ]
+
+    new_cat = random.choice(candidates)
+    new_color, new_effects = TILE_EFFECTS[new_cat]
+    target.category = new_cat
+    target.color = new_color
+    target.effect = random.choice(new_effects)
+
+    # Reset original tile to neutral
+    neutral_color, neutral_effects = TILE_EFFECTS[TileCategory.NEUTRAL]
+    tile.category = TileCategory.NEUTRAL
+    tile.color = neutral_color
+    tile.effect = random.choice(neutral_effects)
+    tile.is_revealed = False
