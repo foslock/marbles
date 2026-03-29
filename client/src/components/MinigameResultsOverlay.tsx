@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { MinigameResults } from '../types/game';
 
 interface Props {
@@ -8,18 +8,27 @@ interface Props {
 
 const PODIUM_COLORS = ['#f39c12', '#bdc3c7', '#cd7f32'];
 const PODIUM_LABELS = ['1st', '2nd', '3rd'];
+const DISMISS_DELAY_MS = 2000;
 
 export function MinigameResultsOverlay({ results, onClose }: Props) {
+  const [canDismiss, setCanDismiss] = useState(false);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   useEffect(() => {
-    const timer = setTimeout(onClose, 5000);
-    return () => clearTimeout(timer);
-  }, [onClose]);
+    const unlockTimer = setTimeout(() => setCanDismiss(true), DISMISS_DELAY_MS);
+    const autoTimer = setTimeout(() => onCloseRef.current(), 5000);
+    return () => {
+      clearTimeout(unlockTimer);
+      clearTimeout(autoTimer);
+    };
+  }, []);
 
   const top3 = results.rankings.filter((r) => r.rank <= 3);
   const rest = results.rankings.filter((r) => r.rank > 3);
 
   return (
-    <div style={styles.overlay} onClick={onClose}>
+    <div style={styles.overlay} onClick={canDismiss ? onClose : undefined}>
       <div style={styles.card}>
         <h2 style={styles.title}>Results!</h2>
 
@@ -55,7 +64,7 @@ export function MinigameResultsOverlay({ results, onClose }: Props) {
           </div>
         )}
 
-        <span style={styles.tap}>Tap to continue</span>
+        <span style={styles.tap}>{canDismiss ? 'Tap to continue' : '…'}</span>
       </div>
     </div>
   );

@@ -93,6 +93,7 @@ export interface TileEffect {
   blocked?: boolean;
   visualEffect?: string;
   autoMarbles?: number;
+  boardUpdates?: { id: number; color: 'green' | 'red' | 'neutral'; category: string; effect: string }[];
 }
 
 export interface BattleResult {

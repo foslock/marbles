@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { TileEffect } from '../types/game';
 import { SFX } from '../utils/sound';
 import { Haptics } from '../utils/haptics';
@@ -29,8 +29,13 @@ const EFFECT_ICONS: Record<string, string> = {
   fortune_cookie: '🥠',
 };
 
+const MIN_DISPLAY_MS = 1000;
+
 export function TileEffectOverlay({ effect, onClose }: Props) {
   const [visible, setVisible] = useState(false);
+  const [canDismiss, setCanDismiss] = useState(false);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     if (effect.color === 'green') {
@@ -48,9 +53,13 @@ export function TileEffectOverlay({ effect, onClose }: Props) {
   }, [effect.color]);
 
   useEffect(() => {
-    const timer = setTimeout(onClose, 3000);
-    return () => clearTimeout(timer);
-  }, [onClose]);
+    const unlockTimer = setTimeout(() => setCanDismiss(true), MIN_DISPLAY_MS);
+    const autoTimer = setTimeout(() => onCloseRef.current(), 3000);
+    return () => {
+      clearTimeout(unlockTimer);
+      clearTimeout(autoTimer);
+    };
+  }, []);
 
   const borderColor =
     effect.color === 'green'
@@ -69,7 +78,7 @@ export function TileEffectOverlay({ effect, onClose }: Props) {
   const icon = EFFECT_ICONS[effect.type] || '⭐';
 
   return (
-    <div style={styles.overlay} onClick={onClose}>
+    <div style={styles.overlay} onClick={canDismiss ? onClose : undefined}>
       <div
         className="animate-bounce-in"
         style={{
@@ -93,7 +102,7 @@ export function TileEffectOverlay({ effect, onClose }: Props) {
             +{effect.autoMarbles} marble(s) from points!
           </p>
         ) : null}
-        <span style={styles.tap}>Tap to dismiss</span>
+        <span style={styles.tap}>{canDismiss ? 'Tap to dismiss' : '…'}</span>
       </div>
     </div>
   );

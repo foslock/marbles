@@ -136,6 +136,19 @@ export function useSocket() {
     });
 
     socket.on('tile_effect', (data: TileEffect) => {
+      if (data.boardUpdates && data.boardUpdates.length > 0) {
+        setGameState((prev) => {
+          if (!prev?.board) return prev;
+          const tiles = { ...prev.board.tiles };
+          for (const update of data.boardUpdates!) {
+            const key = String(update.id);
+            if (tiles[key]) {
+              tiles[key] = { ...tiles[key], color: update.color, category: update.category, effect: update.effect };
+            }
+          }
+          return { ...prev, board: { ...prev.board, tiles } };
+        });
+      }
       setTileEffect(data);
     });
 
