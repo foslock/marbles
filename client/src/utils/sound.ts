@@ -85,6 +85,11 @@ export const SFX = {
     setTimeout(() => playTone(900, 0.2, 'triangle', 0.2), 80);
   },
 
+  /** Subtle step as token passes through a tile during movement. */
+  tileStep() {
+    playTone(350 + Math.random() * 80, 0.06, 'sine', 0.08);
+  },
+
   /** Player lands on tile */
   tileLand() {
     playTone(440, 0.12, 'sine', 0.2);
