@@ -494,18 +494,23 @@ async def _send_turn_update(session):
 
 
 def _get_reachable_tiles(session, start_tile: int, steps: int) -> list[dict]:
-    """BFS to find all tiles reachable in exactly `steps` moves (forward or backward)."""
+    """BFS to find all tiles reachable in exactly `steps` moves (forward or backward).
+
+    Once a direction is chosen, the player cannot backtrack to the tile they just
+    came from. This ensures the player travels exactly `steps` tiles in a chosen
+    direction rather than zig-zagging to reach closer tiles.
+    """
     if not session.board:
         return []
 
-    # BFS tracking: set of (tile_id, steps_remaining)
-    # We allow revisiting tiles with different remaining steps
+    # BFS tracking: (current_tile, steps_remaining, path, came_from_tile)
+    # came_from prevents backtracking to the immediately previous tile
     results = []
     visited = set()
-    queue = [(start_tile, steps, [start_tile])]
+    queue = [(start_tile, steps, [start_tile], None)]
 
     while queue:
-        current, remaining, path = queue.pop(0)
+        current, remaining, path, came_from = queue.pop(0)
 
         if remaining == 0:
             if current != start_tile:  # Can't stay in place
@@ -516,10 +521,12 @@ def _get_reachable_tiles(session, start_tile: int, steps: int) -> list[dict]:
             continue
 
         for neighbor in session.board.tiles[current].neighbors:
-            state = (neighbor, remaining - 1)
+            if neighbor == came_from:
+                continue  # No backtracking to the tile we just came from
+            state = (neighbor, remaining - 1, current)
             if state not in visited:
                 visited.add(state)
-                queue.append((neighbor, remaining - 1, path + [neighbor]))
+                queue.append((neighbor, remaining - 1, path + [neighbor], current))
 
     # Deduplicate by tile ID, keeping shortest path
     seen_tiles = {}
