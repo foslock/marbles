@@ -236,21 +236,47 @@ def _generate_main_loop_positions(
     base_radius_x: float = 400.0,
     base_radius_y: float = 300.0,
 ) -> list[tuple[float, float]]:
-    num_harmonics = 4
-    amplitudes = [random.uniform(20, 60) for _ in range(num_harmonics)]
+    """Generate positions for the main loop using a superellipse base shape.
+
+    A superellipse (squircle-ish) base fills more of the board area than a plain
+    ellipse — the sides are flatter and the corners are more pronounced, reducing
+    the empty center and giving a board-game border feel.  Large harmonic
+    perturbations applied radially add aggressive angle changes.
+    """
+    # squareness n: 2 = standard ellipse, higher values approach a rectangle.
+    # exponent = 2/n; higher squareness → lower exponent → flatter sides.
+    squareness = random.uniform(3.0, 5.0)
+    exponent = 2.0 / squareness
+
+    # Stretch the shape to fill a landscape viewport
+    rx = base_radius_x * random.uniform(0.95, 1.15)
+    ry = base_radius_y * random.uniform(0.70, 0.90)
+
+    # Larger harmonics than before — create sharp bends and aggressive angles
+    num_harmonics = 5
+    amplitudes = [random.uniform(40, 110) for _ in range(num_harmonics)]
     phases = [random.uniform(0, 2 * math.pi) for _ in range(num_harmonics)]
 
     positions = []
     for i in range(count):
         t = 2 * math.pi * i / count
+        cos_t = math.cos(t)
+        sin_t = math.sin(t)
+
+        # Superellipse parametric form: |cos t|^exponent keeps the sign
+        x_base = rx * math.copysign(abs(cos_t) ** exponent, cos_t)
+        y_base = ry * math.copysign(abs(sin_t) ** exponent, sin_t)
+
+        # Harmonic perturbation applied radially (along the outward direction)
+        # so the shape deforms outward/inward rather than in a fixed axis direction
+        base_len = math.hypot(x_base, y_base) or 1.0
         perturb = sum(
             amplitudes[k] * math.sin((k + 2) * t + phases[k])
             for k in range(num_harmonics)
         )
-        rx = base_radius_x + perturb
-        ry = base_radius_y + perturb * 0.7
-        x = rx * math.cos(t)
-        y = ry * math.sin(t)
+        x = x_base + perturb * (x_base / base_len)
+        y = y_base + perturb * (y_base / base_len)
+
         positions.append((x, y))
 
     return positions
@@ -294,7 +320,7 @@ def _generate_alt_route_positions(
     if dot > 0:
         nx, ny = -nx, -ny
 
-    bulge = length * 0.5 + random.uniform(20, 60)
+    bulge = length * 0.55 + random.uniform(50, 90)
 
     positions = []
     for i in range(count):
