@@ -532,13 +532,18 @@ async def submit_minigame_score(sid, data):
     if not hasattr(session, "_minigame_participants"):
         session._minigame_participants = []
 
+    # Only accept scores from actual participants
+    if player_id not in session._minigame_participants:
+        return
+
     session._minigame_scores[player_id] = score
 
     # Check if all participants have submitted
-    if set(session._minigame_scores.keys()) >= set(session._minigame_participants):
-        player_names = {pid: session.players[pid].name for pid in session._minigame_scores}
+    if set(session._minigame_participants) <= set(session._minigame_scores.keys()):
+        participant_scores = {pid: session._minigame_scores[pid] for pid in session._minigame_participants if pid in session._minigame_scores}
+        player_names = {pid: session.players[pid].name for pid in participant_scores}
         bonus = getattr(session, '_minigame_bonus', False)
-        result = calculate_rankings(session._minigame_scores, player_names, bonus=bonus)
+        result = calculate_rankings(participant_scores, player_names, bonus=bonus)
         apply_minigame_prizes(session, result)
 
         await sio.emit("minigame_results", {
