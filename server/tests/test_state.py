@@ -11,6 +11,8 @@ class TestPlayerState:
         assert p.modifiers["protection"] == 0
         assert p.modifiers["double_dice"] == 0
         assert p.modifiers["worst_dice"] == 0
+        assert p.modifiers["short_stop"] == 0
+        assert p.modifiers["dizzy"] == 0
 
     def test_default_values(self):
         p = PlayerState(id="p1", sid="s1", name="Test", role="player")

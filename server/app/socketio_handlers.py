@@ -16,6 +16,7 @@ from .game.minigames.base import (
     apply_minigame_prizes,
 )
 from .game.cpu import run_cpu_turn, cpu_minigame_score
+from .board.pathfinding import get_reachable_tiles as _get_reachable_tiles_impl
 
 logger = logging.getLogger("ltm")
 
@@ -795,38 +796,5 @@ async def _run_cpu_turn_task(session, player):
 
 
 def _get_reachable_tiles(session, start_tile: int, steps: int) -> list[dict]:
-    """BFS to find all tiles reachable in exactly `steps` moves without revisiting tiles.
-
-    Each candidate path carries the set of tiles it has already visited.
-    A neighbor is only followed if it hasn't been visited in the current path,
-    which prevents all zigzag/cycle paths and ensures the animation always
-    travels in one coherent direction.
-    """
-    if not session.board:
-        return []
-
-    # Each entry: (current_tile, steps_remaining, path_list, path_set)
-    # path_set (frozenset) gives O(1) membership checks and is safe to share.
-    results = []
-    seen_destinations: set[int] = set()
-    queue: deque = deque([(start_tile, steps, [start_tile], frozenset([start_tile]))])
-
-    while queue:
-        current, remaining, path, path_set = queue.popleft()
-
-        if remaining == 0:
-            if current not in seen_destinations:
-                seen_destinations.add(current)
-                results.append({"tileId": current, "path": path})
-            continue
-
-        for neighbor in session.board.tiles[current].neighbors:
-            if neighbor not in path_set:
-                queue.append((
-                    neighbor,
-                    remaining - 1,
-                    path + [neighbor],
-                    path_set | {neighbor},
-                ))
-
-    return results
+    """BFS wrapper — delegates to board.pathfinding."""
+    return _get_reachable_tiles_impl(session.board, start_tile, steps)

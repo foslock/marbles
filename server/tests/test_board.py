@@ -106,6 +106,14 @@ class TestBoardGeneration:
             if tile.is_fork or tile.is_merge:
                 assert tile.category == TileCategory.NEUTRAL
 
+    def test_short_stop_in_positive_medium_pool(self):
+        _, effects = TILE_EFFECTS[TileCategory.POSITIVE_MEDIUM]
+        assert "short_stop" in effects
+
+    def test_dizzy_in_negative_medium_pool(self):
+        _, effects = TILE_EFFECTS[TileCategory.NEGATIVE_MEDIUM]
+        assert "dizzy" in effects
+
     def test_major_tiles_not_adjacent(self):
         """Major tiles should not be adjacent to each other."""
         board = generate_board(seed=1)
