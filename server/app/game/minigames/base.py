@@ -48,6 +48,10 @@ def _make_config(minigame_type: str) -> dict:
             return {"sequence": sequence}
         case "dodge":
             return {"seed": random.randint(0, 999999)}
+        case "marble_stack":
+            return {"seed": random.randint(0, 999999)}
+        case "color_sort":
+            return {"seed": random.randint(0, 999999)}
         case _:
             return {}
 
@@ -132,6 +136,22 @@ MINIGAMES = [
         "instructions": "Targets appear randomly on screen. Tap them before they disappear. Most pops wins!",
         "duration": 5000,
         "type": "target_tap",
+    },
+    {
+        "id": "marble_stack",
+        "name": "Marble Stack",
+        "description": "Stack the marbles as high as you can!",
+        "instructions": "A marble swings back and forth. Tap when it's centred to drop it on the stack. Closer to centre = more points!",
+        "duration": 20000,
+        "type": "marble_stack",
+    },
+    {
+        "id": "color_sort",
+        "name": "Color Sort",
+        "description": "Sort the falling marbles by colour!",
+        "instructions": "A marble falls from the top. Tap the matching coloured bucket before it hits the ground!",
+        "duration": 18000,
+        "type": "color_sort",
     },
 ]
 

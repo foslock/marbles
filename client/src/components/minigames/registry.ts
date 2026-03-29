@@ -17,6 +17,8 @@ import { MemoryFlash } from './MemoryFlash';
 import { SwipeDodge } from './SwipeDodge';
 import { SizeMatch } from './SizeMatch';
 import { TiltChase } from './TiltChase';
+import { MarbleStack } from './MarbleStack';
+import { ColorSort } from './ColorSort';
 
 /**
  * Register minigames here. The key must match the `type` field
@@ -33,4 +35,6 @@ export const MINIGAME_REGISTRY: Record<string, ComponentType<MinigameComponentPr
   dodge: SwipeDodge,
   size_match: SizeMatch,
   accelerometer: TiltChase,
+  marble_stack: MarbleStack,
+  color_sort: ColorSort,
 };
