@@ -4,6 +4,7 @@ import type {
   DiceResult,
   TileEffect,
   MinigameResults,
+  ActivityItem,
 } from '../types/game';
 import { GameBoard, type MoveAnimation } from './GameBoard';
 import { DiceRoller } from './DiceRoller';
@@ -11,6 +12,7 @@ import { TileEffectOverlay } from './TileEffectOverlay';
 import { MinigameResultsOverlay } from './MinigameResultsOverlay';
 import { PlayerHUD } from './PlayerHUD';
 import { Scoreboard } from './Scoreboard';
+import { ActivityFeed } from './ActivityFeed';
 
 interface Props {
   gameState: GameState;
@@ -20,6 +22,7 @@ interface Props {
   minigameResults: MinigameResults | null;
   awaitingChoice: TileEffect | null;
   moveAnimation: MoveAnimation | null;
+  activityFeed: ActivityItem[];
   onRollDice: (useReroll?: boolean) => void;
   onChooseMove: (tileId: number, path?: number[]) => void;
   onMakeChoice: (choiceType: string, targetId: string, amount?: number) => void;
@@ -37,6 +40,7 @@ export function GameScreen({
   minigameResults,
   awaitingChoice,
   moveAnimation,
+  activityFeed,
   onRollDice,
   onChooseMove,
   onMakeChoice,
@@ -139,7 +143,7 @@ export function GameScreen({
         </button>
       </div>
 
-      {/* Main content */}
+      {/* Main content — board fills this area; dice + feed float on top */}
       <div style={styles.mainContent}>
         {showScoreboard ? (
           <Scoreboard
@@ -161,6 +165,27 @@ export function GameScreen({
             activePlayerId={displayedTurnPlayerId}
           />
         )}
+
+        {/* Activity feed — bottom-left overlay */}
+        <ActivityFeed items={activityFeed} />
+
+        {/* Dice roller — floats at bottom-center over the board */}
+        {isMyTurn && !effectToShow && (
+          <div style={styles.diceFloat}>
+            <DiceRoller
+              onRoll={onRollDice}
+              hasRerolls={(myPlayer?.modifiers.rerolls ?? 0) > 0}
+              hasDoubleDice={(myPlayer?.modifiers.double_dice ?? 0) > 0}
+              hasWorstDice={(myPlayer?.modifiers.worst_dice ?? 0) > 0}
+              rolledValue={diceResult?.playerId === playerId ? diceResult.roll : null}
+            />
+            {needsToChooseMove && (
+              <p style={styles.diceFloatHint}>
+                Tap a highlighted tile! (Rolled {diceResult.roll})
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Player HUD at bottom */}
@@ -168,33 +193,16 @@ export function GameScreen({
         <PlayerHUD player={myPlayer} />
       )}
 
-      {/* Action area */}
+      {/* Thin status strip — only non-dice messages; fixed height so layout never shifts */}
       <div style={styles.actionArea}>
-        {isMyTurn && !effectToShow && (
-          <DiceRoller
-            onRoll={onRollDice}
-            hasRerolls={(myPlayer?.modifiers.rerolls ?? 0) > 0}
-            hasDoubleDice={(myPlayer?.modifiers.double_dice ?? 0) > 0}
-            hasWorstDice={(myPlayer?.modifiers.worst_dice ?? 0) > 0}
-            rolledValue={diceResult?.playerId === playerId ? diceResult.roll : null}
-          />
-        )}
-
         {!isMyTurn && !isSpectator && !effectToShow && (
           <p style={styles.waitText}>
             Waiting for {currentTurnPlayer?.name || 'someone'}...
           </p>
         )}
-
         {diceResult && diceResult.playerId !== playerId && (
           <p style={styles.infoText}>
             {diceResult.playerName} rolled {diceResult.roll}!
-          </p>
-        )}
-
-        {needsToChooseMove && (
-          <p style={styles.infoText}>
-            Tap a highlighted tile to move! (Rolled {diceResult.roll})
           </p>
         )}
       </div>
@@ -287,8 +295,36 @@ const styles: Record<string, React.CSSProperties> = {
     position: 'relative',
   },
   actionArea: {
-    padding: '8px 16px',
+    padding: '4px 16px',
     textAlign: 'center',
+    minHeight: '28px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  diceFloat: {
+    position: 'absolute',
+    bottom: '16px',
+    left: '50%',
+    transform: 'translateX(-50%)',
+    zIndex: 20,
+    background: 'rgba(10, 25, 47, 0.88)',
+    borderRadius: '18px',
+    padding: '8px 16px 10px',
+    backdropFilter: 'blur(8px)',
+    border: '1px solid rgba(35, 53, 84, 0.9)',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    boxShadow: '0 4px 24px rgba(0,0,0,0.4)',
+  },
+  diceFloatHint: {
+    color: '#ccd6f6',
+    fontSize: '12px',
+    fontWeight: 500,
+    margin: '4px 0 0 0',
+    textAlign: 'center',
+    whiteSpace: 'nowrap',
   },
   waitText: {
     color: '#8892b0',

@@ -8,6 +8,7 @@ import type {
   TileEffect,
   MinigameInfo,
   MinigameResults,
+  ActivityItem,
 } from '../types/game';
 import { SFX } from '../utils/sound';
 import { Haptics } from '../utils/haptics';
@@ -31,6 +32,7 @@ export function useSocket() {
   const [error, setError] = useState<string | null>(null);
   const [awaitingChoice, setAwaitingChoice] = useState<TileEffect | null>(null);
   const [moveAnimation, setMoveAnimation] = useState<{ playerId: string; path: number[] } | null>(null);
+  const [activityFeed, setActivityFeed] = useState<ActivityItem[]>([]);
 
   useEffect(() => {
     const socket = io(SOCKET_URL, {
@@ -148,6 +150,14 @@ export function useSocket() {
         });
       }
       setTileEffect(data);
+      if (data.message && !data.requiresChoice) {
+        const color: ActivityItem['color'] =
+          data.color === 'green' ? 'green' : data.color === 'red' ? 'red' : 'neutral';
+        setActivityFeed((prev) => [
+          ...prev,
+          { id: `te-${Date.now()}-${Math.random()}`, message: `${data.playerName}: ${data.message}`, color, timestamp: Date.now() },
+        ]);
+      }
     });
 
     socket.on('awaiting_choice', (data: TileEffect) => {
@@ -170,6 +180,23 @@ export function useSocket() {
       // turn_update arrives right after but must NOT clear minigameResults — the
       // overlay's own timer / user tap handles that.
       setPhase('playing');
+      // Add activity entries for top finishers
+      const now = Date.now();
+      const newItems: ActivityItem[] = [];
+      if (data.rankings.length > 0) {
+        newItems.push({ id: `mg-w-${now}`, message: `🏆 ${data.rankings[0].name} won the minigame!`, color: 'gold', timestamp: now });
+      }
+      data.rankings.forEach((r) => {
+        if (r.prizeMarbles > 0) {
+          newItems.push({ id: `mg-m-${r.id}-${now}`, message: `🔮 ${r.name} earned a marble!`, color: 'gold', timestamp: now + 1 });
+        }
+        if (r.prizePoints > 0) {
+          newItems.push({ id: `mg-p-${r.id}-${now}`, message: `⭐ ${r.name} +${r.prizePoints}pts`, color: 'green', timestamp: now + 2 });
+        }
+      });
+      if (newItems.length > 0) {
+        setActivityFeed((prev) => [...prev, ...newItems]);
+      }
     });
 
     socket.on('turn_update', (data) => {
@@ -215,6 +242,7 @@ export function useSocket() {
       setMinigameResults(null);
       setAwaitingChoice(null);
       setMoveAnimation(null);
+      setActivityFeed([]);
       setLobby(null);
       setPlayerId(null);
       playerIdRef.current = null;
@@ -288,6 +316,7 @@ export function useSocket() {
     error,
     awaitingChoice,
     moveAnimation,
+    activityFeed,
     createSession,
     joinSession,
     startGame,

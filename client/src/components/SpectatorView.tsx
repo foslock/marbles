@@ -1,12 +1,14 @@
 import { useMemo, useEffect } from 'react';
-import type { GameState, MinigameResults, TileEffect } from '../types/game';
+import type { GameState, MinigameResults, TileEffect, ActivityItem } from '../types/game';
 import { GameBoard, type MoveAnimation } from './GameBoard';
+import { ActivityFeed } from './ActivityFeed';
 
 interface Props {
   gameState: GameState;
   tileEffect: TileEffect | null;
   minigameResults: MinigameResults | null;
   moveAnimation: MoveAnimation | null;
+  activityFeed: ActivityItem[];
   onClearMoveAnimation: () => void;
   onClearTileEffect: () => void;
   onClearMinigameResults: () => void;
@@ -22,6 +24,7 @@ export function SpectatorView({
   tileEffect,
   minigameResults,
   moveAnimation,
+  activityFeed,
   onClearMoveAnimation,
   onClearTileEffect,
   onClearMinigameResults,
@@ -63,6 +66,9 @@ export function SpectatorView({
           moveAnimation={moveAnimation}
           onAnimationComplete={onClearMoveAnimation}
         />
+
+        {/* Activity feed — bottom-left, tappable to expand full history */}
+        <ActivityFeed items={activityFeed} expandable />
 
         {/* Turn banner */}
         <div style={styles.turnBanner}>
