@@ -109,6 +109,7 @@ export default function App() {
           onClearBattleResult={socket.clearBattleResult}
           onClearMinigameResults={socket.clearMinigameResults}
           onClearMoveAnimation={socket.clearMoveAnimation}
+          onEndGame={socket.endGame}
         />
       )}
 

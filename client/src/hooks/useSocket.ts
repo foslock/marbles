@@ -201,6 +201,24 @@ export function useSocket() {
       sessionStorage.removeItem('ltm_session');
     });
 
+    socket.on('game_ended', () => {
+      // Host forcibly ended the game — reset all client state
+      setGameState(null);
+      setDiceResult(null);
+      setTileEffect(null);
+      setBattleResult(null);
+      setMinigameInfo(null);
+      setMinigameResults(null);
+      setAwaitingChoice(null);
+      setMoveAnimation(null);
+      setLobby(null);
+      setPlayerId(null);
+      playerIdRef.current = null;
+      setSessionId(null);
+      setPhase('home');
+      sessionStorage.removeItem('ltm_session');
+    });
+
     return () => {
       clearTimeout(timeoutId);
       socket.disconnect();
@@ -244,6 +262,9 @@ export function useSocket() {
     setPhase('playing');
   }, []);
   const clearMoveAnimation = useCallback(() => setMoveAnimation(null), []);
+  const endGame = useCallback(() => {
+    socketRef.current?.emit('end_game', {});
+  }, []);
 
   return {
     connected,
@@ -273,5 +294,6 @@ export function useSocket() {
     clearBattleResult,
     clearMinigameResults,
     clearMoveAnimation,
+    endGame,
   };
 }

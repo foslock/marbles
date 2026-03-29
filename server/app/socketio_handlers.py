@@ -229,6 +229,29 @@ async def start_game(sid, data):
 
 
 @sio.event
+async def end_game(sid, data):
+    """Host forcibly ends the game, clearing all server state."""
+    player_mapping = session_manager.sid_to_player.get(sid)
+    if not player_mapping:
+        return
+
+    session_id, player_id = player_mapping
+    session = session_manager.get_session(session_id)
+    if not session or session.host_id != player_id:
+        await sio.emit("error", {"message": "Only the host can end the game."}, to=sid)
+        return
+
+    # Notify everyone before tearing down
+    await sio.emit("game_ended", {"message": "The host ended the game."}, room=session_id)
+
+    # Remove session and all player mappings
+    session_manager.delete_session(session_id)
+
+    # Clear the Socket.IO room
+    await sio.close_room(session_id)
+
+
+@sio.event
 async def roll_dice(sid, data):
     """Player rolls the dice on their turn."""
     player_mapping = session_manager.sid_to_player.get(sid)
