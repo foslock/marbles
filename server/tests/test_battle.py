@@ -1,79 +1,53 @@
-"""Tests for the battle system."""
+"""Tests for the tile-collision / minigame-trigger system."""
 
 import pytest
-from unittest.mock import patch
-from app.game.battle import check_for_battle, resolve_dice_battle, PRIZE_DIE_OPTIONS
+from app.game.battle import check_for_battle
 
 
 class TestCheckForBattle:
-    def test_no_battle_alone(self, session, player):
-        """No battle when player is alone on tile."""
+    def test_no_collision_alone(self, session, player):
+        """No trigger when player is alone on tile."""
         result = check_for_battle(session, player)
         assert result is None
 
-    def test_dice_battle_two_on_tile_3plus_game(self, session, player, opponent):
-        """2 players on same tile in 3+ player game -> dice battle."""
+    def test_collision_two_players(self, session, player, opponent):
+        """Two players on same tile → minigame, no bonus."""
         opponent.current_tile = player.current_tile
         result = check_for_battle(session, player)
         assert result is not None
-        assert result["type"] == "dice_battle"
+        assert result["type"] == "minigame"
         assert len(result["participants"]) == 2
+        assert result["bonus"] is False
 
-    def test_minigame_three_on_tile(self, session, player, opponent):
-        """3+ players on same tile -> minigame."""
+    def test_bonus_three_players(self, session, player, opponent):
+        """Three players on same tile → minigame with bonus flag."""
         opponent.current_tile = player.current_tile
         session.players["player-2"].current_tile = player.current_tile
         result = check_for_battle(session, player)
         assert result is not None
         assert result["type"] == "minigame"
         assert len(result["participants"]) == 3
+        assert result["bonus"] is True
 
-    def test_minigame_two_player_game(self, session, player, opponent):
-        """In a 2-player game, same tile -> minigame (not dice battle)."""
-        # Remove 3rd player
+    def test_collision_two_player_game(self, session, player, opponent):
+        """In a 2-player game, landing on opponent's tile still triggers minigame."""
         del session.players["player-2"]
         session.turn_order = ["player-0", "player-1"]
         opponent.current_tile = player.current_tile
         result = check_for_battle(session, player)
         assert result is not None
         assert result["type"] == "minigame"
+        assert result["bonus"] is False
 
+    def test_participants_include_mover(self, session, player, opponent):
+        """The player who moved is always in participants list."""
+        opponent.current_tile = player.current_tile
+        result = check_for_battle(session, player)
+        assert player.id in result["participants"]
 
-class TestResolveDiceBattle:
-    def test_resolve_has_winner(self, session):
-        result = resolve_dice_battle(session, "player-0", "player-1")
-        assert result["winnerId"] in ("player-0", "player-1")
-        assert result["loserId"] in ("player-0", "player-1")
-        assert result["winnerId"] != result["loserId"]
-        assert result["playerRoll"] != result["opponentRoll"]
-
-    def test_prize_in_valid_range(self, session):
-        result = resolve_dice_battle(session, "player-0", "player-1")
-        assert result["prizeRoll"] in PRIZE_DIE_OPTIONS
-
-    def test_actual_prize_capped(self, session):
-        """Can't steal more points than the loser has."""
-        session.players["player-0"].points = 5
-        session.players["player-1"].points = 5
-        result = resolve_dice_battle(session, "player-0", "player-1")
-        assert result["actualPrize"] <= 5
-
-    def test_points_transferred(self, session):
-        p0_pts = session.players["player-0"].points
-        p1_pts = session.players["player-1"].points
-        total_before = p0_pts + p1_pts
-        result = resolve_dice_battle(session, "player-0", "player-1")
-        p0_after = session.players["player-0"].points
-        p1_after = session.players["player-1"].points
-        # Total points should be conserved (winner gains what loser loses)
-        assert p0_after + p1_after == total_before
-
-    @patch("app.game.battle.random.randint")
-    def test_player_wins_on_higher_roll(self, mock_randint, session):
-        # First two calls for player/opponent rolls, no tie
-        mock_randint.side_effect = [6, 1]
-        with patch("app.game.battle.random.choice", return_value=10):
-            result = resolve_dice_battle(session, "player-0", "player-1")
-        assert result["winnerId"] == "player-0"
-        assert result["playerRoll"] == 6
-        assert result["opponentRoll"] == 1
+    def test_bonus_message_mentions_double(self, session, player, opponent):
+        """Bonus round message communicates the 2× prize."""
+        opponent.current_tile = player.current_tile
+        session.players["player-2"].current_tile = player.current_tile
+        result = check_for_battle(session, player)
+        assert "2×" in result["message"] or "bonus" in result["message"].lower()
