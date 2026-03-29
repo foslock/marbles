@@ -39,7 +39,7 @@ class GameSession:
     passphrase: str
     host_id: str | None = None
     state: str = "lobby"  # lobby, playing, finished
-    target_marbles: int = 10
+    target_marbles: int = 3
     players: dict[str, PlayerState] = field(default_factory=dict)
     board: Board | None = None
     turn_order: list[str] = field(default_factory=list)

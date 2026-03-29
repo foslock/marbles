@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { MinigameResults } from '../types/game';
+import { Fireworks } from './Fireworks';
 
 interface Props {
   results: MinigameResults;
@@ -47,6 +48,8 @@ export function MinigameResultsOverlay({ results, onClose }: Props) {
 
   return (
     <div style={styles.overlay} onClick={canDismiss ? onClose : undefined}>
+      {/* Fireworks behind the card — canvas is first child so card paints on top */}
+      <Fireworks intensity="normal" />
       <div
         style={{
           ...styles.card,
