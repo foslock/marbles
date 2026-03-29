@@ -280,7 +280,7 @@ export function GameScreen({
         <ActivityFeed items={activityFeed} />
 
         {/* Physics dice overlay — visible during active turns */}
-        {!effectToShow && !choiceToShow && !minigameResults && (
+        {!effectToShow && !choiceToShow && !minigameResults && !tileSwapAnimation && !activeMoveAnimation && (
           <DiceOverlay
             isMyTurn={isMyTurn}
             isSpectator={isSpectator}
