@@ -85,6 +85,32 @@ class TestProcessTileEffect:
         result = process_tile_effect(session, player)
         assert player.modifiers["worst_dice"] == 1
 
+    def test_short_stop(self, session, player):
+        self._set_tile_effect(session, player, "short_stop", TileCategory.POSITIVE_MEDIUM, TileColor.GREEN)
+        result = process_tile_effect(session, player)
+        assert player.modifiers["short_stop"] == 1
+        assert result["type"] == "short_stop"
+
+    def test_short_stop_stacks(self, session, player):
+        player.modifiers["short_stop"] = 1
+        self._set_tile_effect(session, player, "short_stop", TileCategory.POSITIVE_MEDIUM, TileColor.GREEN)
+        process_tile_effect(session, player)
+        assert player.modifiers["short_stop"] == 2
+
+    def test_dizzy(self, session, player):
+        self._set_tile_effect(session, player, "dizzy", TileCategory.NEGATIVE_MEDIUM, TileColor.RED)
+        result = process_tile_effect(session, player)
+        assert player.modifiers["dizzy"] == 1
+        assert result["type"] == "dizzy"
+
+    def test_dizzy_blocked_by_protection(self, session, player):
+        player.modifiers["protection"] = 1
+        self._set_tile_effect(session, player, "dizzy", TileCategory.NEGATIVE_MEDIUM, TileColor.RED)
+        result = process_tile_effect(session, player)
+        assert result["blocked"] is True
+        assert player.modifiers["dizzy"] == 0
+        assert player.modifiers["protection"] == 0
+
     def test_fortune_cookie(self, session, player):
         self._set_tile_effect(session, player, "fortune_cookie", TileCategory.NEUTRAL, TileColor.NEUTRAL)
         result = process_tile_effect(session, player)
