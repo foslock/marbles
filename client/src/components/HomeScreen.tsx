@@ -1,11 +1,12 @@
 import { useState } from 'react';
 
 interface Props {
+  connected: boolean;
   onCreateSession: (name: string, targetMarbles: number) => void;
   onJoinSession: (passphrase: string, name: string, role: string) => void;
 }
 
-export function HomeScreen({ onCreateSession, onJoinSession }: Props) {
+export function HomeScreen({ connected, onCreateSession, onJoinSession }: Props) {
   const [mode, setMode] = useState<'menu' | 'create' | 'join'>('menu');
   const [name, setName] = useState('');
   const [passphrase, setPassphrase] = useState('');
@@ -32,10 +33,18 @@ export function HomeScreen({ onCreateSession, onJoinSession }: Props) {
 
       {mode === 'menu' && (
         <div style={styles.buttonGroup}>
-          <button style={styles.primaryButton} onClick={() => setMode('create')}>
-            Host a Game
+          <button
+            style={{ ...styles.primaryButton, ...(!connected ? styles.disabledButton : {}) }}
+            onClick={() => connected && setMode('create')}
+            disabled={!connected}
+          >
+            {connected ? 'Host a Game' : 'Connecting…'}
           </button>
-          <button style={styles.secondaryButton} onClick={() => setMode('join')}>
+          <button
+            style={{ ...styles.secondaryButton, ...(!connected ? styles.disabledButton : {}) }}
+            onClick={() => connected && setMode('join')}
+            disabled={!connected}
+          >
             Join a Game
           </button>
         </div>
@@ -167,6 +176,10 @@ const styles: Record<string, React.CSSProperties> = {
     gap: '12px',
     width: '100%',
     maxWidth: '300px',
+  },
+  disabledButton: {
+    opacity: 0.45,
+    cursor: 'not-allowed',
   },
   primaryButton: {
     padding: '16px 32px',

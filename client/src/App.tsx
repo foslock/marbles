@@ -39,6 +39,7 @@ export default function App() {
 
       {socket.phase === 'home' && (
         <HomeScreen
+          connected={socket.connected}
           onCreateSession={socket.createSession}
           onJoinSession={socket.joinSession}
         />
