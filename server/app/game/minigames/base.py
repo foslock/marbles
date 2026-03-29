@@ -44,7 +44,7 @@ def _make_config(minigame_type: str) -> dict:
             sizes = [random.randint(40, 200) for _ in range(5)]
             return {"targetSizes": sizes}
         case "memory":
-            sequence = [random.randint(0, 3) for _ in range(12)]
+            sequence = [random.randint(0, 3) for _ in range(16)]
             return {"sequence": sequence}
         case "dodge":
             return {"seed": random.randint(0, 999999)}
@@ -118,7 +118,7 @@ MINIGAMES = [
         "name": "Memory Flash",
         "description": "Remember the sequence!",
         "instructions": "Colored tiles flash in a sequence. Repeat the sequence from memory. Longest correct streak wins!",
-        "duration": 8000,
+        "duration": 12000,
         "type": "memory",
     },
     {
@@ -126,7 +126,7 @@ MINIGAMES = [
         "name": "Swipe Dodge",
         "description": "Dodge the obstacles!",
         "instructions": "Swipe left/right to dodge falling obstacles. Survive the longest to win!",
-        "duration": 6000,
+        "duration": 20000,
         "type": "dodge",
     },
     {

@@ -1,165 +1,155 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { MinigameComponentProps } from './types';
 
-const ROUND_DURATION = 2500; // ms per round — timer anchored to roundIndex, not playerSize
+interface OvalTarget { rx: number; ry: number; }
 
-interface OvalTarget {
-  rx: number; // half-width
-  ry: number; // half-height
+// Match threshold: player's scale must be within ±5% of 1.0
+const MATCH_THRESHOLD = 0.05;
+
+function makeOval(rng: () => number): OvalTarget {
+  return {
+    rx: 35 + Math.floor(rng() * 85),   // 35–120
+    ry: 35 + Math.floor(rng() * 85),   // different range each call → non-circular
+  };
 }
 
-function makeTargets(seed?: number): OvalTarget[] {
-  // Generate 5 rounds of oval targets. rx and ry differ to make non-circular ovals.
-  const rng = (() => {
-    let s = seed ?? Math.floor(Math.random() * 99999);
-    return () => { s = (s * 16807 + 0) % 2147483647; return (s - 1) / 2147483646; };
-  })();
-  return Array.from({ length: 5 }, () => ({
-    rx: 30 + Math.floor(rng() * 90),  // 30–120
-    ry: 30 + Math.floor(rng() * 90),  // 30–120 (different from rx → oval)
-  }));
+function makeRng(seed?: number) {
+  let s = seed ?? Math.floor(Math.random() * 99999);
+  return () => { s = (s * 16807) % 2147483647; return (s - 1) / 2147483646; };
 }
 
 export function SizeMatch({ onScoreUpdate, config }: MinigameComponentProps) {
-  const targets = useRef<OvalTarget[]>(
-    (config?.targetOvals as OvalTarget[]) ?? makeTargets(config?.seed as number | undefined)
-  );
-  const [roundIndex, setRoundIndex] = useState(0);
-  // playerSize is a scale multiplier: 1.0 means oval exactly matches the target
+  const rng = useRef(makeRng(config?.seed as number | undefined));
+  const [target, setTarget] = useState<OvalTarget>(() => makeOval(rng.current));
   const [playerScale, setPlayerScale] = useState(0.5);
   const playerScaleRef = useRef(0.5);
+  const [matched, setMatched] = useState(false);     // brief "matched!" flash state
   const scoreRef = useRef(0);
+  const [score, setScore] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const target = targets.current[roundIndex];
+  // Drag state — single-finger vertical drag changes scale; pinch also works
+  const dragRef = useRef<{ y: number; scale: number; pointerId: number } | null>(null);
+  const pinchRef = useRef<{ ids: [number, number]; dist: number; scale: number } | null>(null);
+  const pointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
 
-  // Round timer — anchored to roundIndex only, reads size via ref so resizing
-  // doesn't reset the clock.
-  useEffect(() => {
-    if (!target) return;
-    const timer = setTimeout(() => {
-      // Score: how close is the player's scale to 1.0 (perfect match)?
-      // diff in px: compare actual player radii vs target radii
-      const ps = playerScaleRef.current;
-      const diffRx = Math.abs(target.rx * ps - target.rx);
-      const diffRy = Math.abs(target.ry * ps - target.ry);
-      const avgDiff = (diffRx + diffRy) / 2;
-      const accuracy = Math.max(0, Math.round(100 - avgDiff));
-      scoreRef.current += accuracy;
-      onScoreUpdate(scoreRef.current);
-      // Reset for next round
-      playerScaleRef.current = 0.5;
-      setPlayerScale(0.5);
-      setRoundIndex((r) => r + 1);
-    }, ROUND_DURATION);
-    return () => clearTimeout(timer);
-  }, [roundIndex, target, onScoreUpdate]);
-
-  // Pinch/spread gesture via pointer distance tracking
-  const pointers = useRef<Map<number, { x: number; y: number }>>(new Map());
-  const initialPinchDist = useRef<number | null>(null);
-  const initialScale = useRef(0.5);
+  const applyScale = useCallback((next: number) => {
+    const clamped = Math.max(0.12, Math.min(2.8, next));
+    playerScaleRef.current = clamped;
+    setPlayerScale(clamped);
+  }, []);
 
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
-    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (pointers.current.size === 2) {
-      const pts = Array.from(pointers.current.values());
-      initialPinchDist.current = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
-      initialScale.current = playerScaleRef.current;
+    pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (pointersRef.current.size === 2) {
+      // Start pinch
+      const ids = Array.from(pointersRef.current.keys()) as [number, number];
+      const pts = Array.from(pointersRef.current.values());
+      const dist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+      pinchRef.current = { ids, dist, scale: playerScaleRef.current };
+      dragRef.current = null; // cancel any active drag
+    } else {
+      // Start single-finger drag
+      dragRef.current = { y: e.clientY, scale: playerScaleRef.current, pointerId: e.pointerId };
+      pinchRef.current = null;
     }
   }, []);
 
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
-    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (pointers.current.size === 2 && initialPinchDist.current !== null) {
-      const pts = Array.from(pointers.current.values());
+    pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (pinchRef.current && pointersRef.current.size >= 2) {
+      const pts = Array.from(pointersRef.current.values());
       const dist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
-      const ratio = dist / initialPinchDist.current;
-      const next = Math.max(0.15, Math.min(2.5, initialScale.current * ratio));
-      playerScaleRef.current = next;
-      setPlayerScale(next);
+      applyScale(pinchRef.current.scale * (dist / pinchRef.current.dist));
+      return;
     }
-  }, []);
+
+    if (dragRef.current && dragRef.current.pointerId === e.pointerId) {
+      const dy = dragRef.current.y - e.clientY; // drag up = positive = grow
+      const rect = containerRef.current?.getBoundingClientRect();
+      const height = rect?.height ?? 400;
+      // Full screen height drag = 2.6x scale change
+      const delta = (dy / height) * 2.6;
+      applyScale(dragRef.current.scale + delta);
+    }
+  }, [applyScale]);
 
   const handlePointerUp = useCallback((e: React.PointerEvent) => {
-    pointers.current.delete(e.pointerId);
-    if (pointers.current.size < 2) initialPinchDist.current = null;
+    pointersRef.current.delete(e.pointerId);
+    if (dragRef.current?.pointerId === e.pointerId) dragRef.current = null;
+    if (pointersRef.current.size < 2) pinchRef.current = null;
   }, []);
 
-  // Single-finger tap: tap top half → grow, bottom half → shrink
-  const handleTap = useCallback((e: React.PointerEvent) => {
-    if (pointers.current.size > 1) return; // ignore during pinch
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const y = e.clientY - rect.top;
-    const delta = y < rect.height / 2 ? 0.08 : -0.08;
-    const next = Math.max(0.15, Math.min(2.5, playerScaleRef.current + delta));
-    playerScaleRef.current = next;
-    setPlayerScale(next);
-  }, []);
-
-  if (!target) {
-    return (
-      <div style={styles.container}>
-        <span style={styles.doneText}>All rounds complete!</span>
-        <span style={styles.finalScore}>{scoreRef.current}</span>
-      </div>
-    );
-  }
+  // Check for match each frame via an interval
+  useEffect(() => {
+    if (matched) return;
+    const interval = setInterval(() => {
+      const diff = Math.abs(playerScaleRef.current - 1.0);
+      if (diff <= MATCH_THRESHOLD) {
+        // Matched!
+        setMatched(true);
+        scoreRef.current += 1;
+        setScore(scoreRef.current);
+        onScoreUpdate(scoreRef.current);
+        // Brief success pause, then new oval
+        setTimeout(() => {
+          setTarget(makeOval(rng.current));
+          playerScaleRef.current = 0.5;
+          setPlayerScale(0.5);
+          setMatched(false);
+        }, 600);
+      }
+    }, 50);
+    return () => clearInterval(interval);
+  }, [matched, onScoreUpdate]);
 
   const playerRx = target.rx * playerScale;
   const playerRy = target.ry * playerScale;
-  const diffRx = Math.abs(playerRx - target.rx);
-  const diffRy = Math.abs(playerRy - target.ry);
-  const isClose = diffRx < 8 && diffRy < 8;
+  const diff = Math.abs(playerScale - 1.0);
+  const isClose = diff <= MATCH_THRESHOLD;
+  const isWarm = diff <= 0.15;
 
   return (
     <div
       ref={containerRef}
       style={styles.container}
-      onPointerDown={(e) => { handlePointerDown(e); handleTap(e); }}
+      onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerLeave={handlePointerUp}
       onPointerCancel={handlePointerUp}
     >
       <div style={styles.info}>
-        <span style={styles.round}>Round {roundIndex + 1}/{targets.current.length}</span>
-        <span style={styles.score}>{scoreRef.current}</span>
+        <span style={styles.label}>Matched</span>
+        <span style={styles.score}>{score}</span>
       </div>
 
-      {/* Overlay both ovals in an SVG so they share a coordinate space */}
-      <svg
-        style={styles.svg}
-        viewBox="0 0 300 340"
-        xmlns="http://www.w3.org/2000/svg"
-      >
-        {/* Target oval (ghost outline) */}
+      {matched && <div style={styles.matchFlash}>✓ MATCH!</div>}
+
+      <svg style={styles.svg} viewBox="0 0 300 340">
+        {/* Target oval (dashed ghost) */}
         <ellipse
-          cx={150}
-          cy={170}
-          rx={target.rx}
-          ry={target.ry}
+          cx={150} cy={170}
+          rx={target.rx} ry={target.ry}
           fill="none"
-          stroke="rgba(255,255,255,0.25)"
+          stroke="rgba(255,255,255,0.28)"
           strokeWidth={3}
           strokeDasharray="8 5"
         />
-
         {/* Player oval */}
         <ellipse
-          cx={150}
-          cy={170}
+          cx={150} cy={170}
           rx={Math.max(2, playerRx)}
           ry={Math.max(2, playerRy)}
-          fill={isClose ? 'rgba(46,204,113,0.18)' : 'rgba(52,152,219,0.15)'}
-          stroke={isClose ? '#2ecc71' : '#3498db'}
+          fill={isClose ? 'rgba(46,204,113,0.2)' : isWarm ? 'rgba(243,156,18,0.1)' : 'rgba(52,152,219,0.12)'}
+          stroke={isClose ? '#2ecc71' : isWarm ? '#f39c12' : '#3498db'}
           strokeWidth={4}
-          style={{ transition: 'rx 0.05s, ry 0.05s, stroke 0.2s' } as React.CSSProperties}
         />
       </svg>
 
-      <span style={styles.hint}>Pinch to resize · tap top=grow bottom=shrink</span>
+      <span style={styles.hint}>Drag up/down to resize · Pinch also works</span>
     </div>
   );
 }
@@ -172,19 +162,20 @@ const styles: Record<string, React.CSSProperties> = {
   },
   info: {
     position: 'absolute', top: '8px', left: '12px', right: '12px',
-    display: 'flex', justifyContent: 'space-between',
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
   },
-  round: { color: '#a8b2d1', fontSize: '14px' },
-  score: { color: '#f39c12', fontSize: '20px', fontWeight: 800 },
-  svg: {
-    width: '300px',
-    height: '340px',
-    overflow: 'visible',
-  },
+  label: { color: '#a8b2d1', fontSize: '14px' },
+  score: { color: '#f39c12', fontSize: '28px', fontWeight: 800 },
+  svg: { width: '300px', height: '340px', overflow: 'visible' },
   hint: {
     position: 'absolute', bottom: '12px',
     color: 'rgba(255,255,255,0.4)', fontSize: '12px', textAlign: 'center',
   },
-  doneText: { color: '#ccd6f6', fontSize: '20px', marginBottom: '8px' },
-  finalScore: { color: '#f39c12', fontSize: '48px', fontWeight: 800 },
+  matchFlash: {
+    position: 'absolute', top: '50%', left: '50%',
+    transform: 'translate(-50%, -50%)',
+    color: '#2ecc71', fontSize: '32px', fontWeight: 900,
+    textShadow: '0 0 20px #2ecc71',
+    zIndex: 10, pointerEvents: 'none',
+  },
 };
