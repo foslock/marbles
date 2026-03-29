@@ -94,7 +94,7 @@ async def create_session(sid, data):
     session = session_manager.create_session(passphrase, target_marbles)
 
     # Add host as player
-    name = data.get("name", "Player 1")
+    name = data.get("name", "Player 1")[:12]
     player = session_manager.add_player(session.id, sid, name, "player")
 
     await sio.enter_room(sid, session.id)
@@ -113,7 +113,7 @@ async def create_session(sid, data):
 async def join_session(sid, data):
     """Player or spectator joins an existing session."""
     passphrase = data.get("passphrase", "").strip().lower()
-    name = data.get("name", "Player")
+    name = data.get("name", "Player")[:12]
     role = data.get("role", "player")
 
     session = session_manager.get_session_by_passphrase(passphrase)

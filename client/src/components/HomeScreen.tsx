@@ -155,7 +155,7 @@ export function HomeScreen({ connected, onCreateSession, onJoinSession }: Props)
             placeholder="Your name"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            maxLength={20}
+            maxLength={12}
             autoFocus
           />
           <div style={styles.settingRow}>
@@ -192,7 +192,7 @@ export function HomeScreen({ connected, onCreateSession, onJoinSession }: Props)
             placeholder="Your name"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            maxLength={20}
+            maxLength={12}
             autoFocus
           />
           <input

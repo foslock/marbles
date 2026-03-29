@@ -11,10 +11,7 @@ export function PlayerHUD({ player }: Props) {
     <div style={styles.container}>
       <div style={styles.tokenInfo}>
         <span style={styles.emoji}>{player.token?.emoji || '?'}</span>
-        <div>
-          <div style={styles.name}>{player.name}</div>
-          <div style={styles.tokenName}>{player.token?.name || ''}</div>
-        </div>
+        <div style={styles.name}>{player.name}</div>
       </div>
 
       <div style={styles.stats}>
@@ -80,10 +77,6 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#ccd6f6',
     fontSize: '13px',
     fontWeight: 600,
-  },
-  tokenName: {
-    color: '#8892b0',
-    fontSize: '10px',
   },
   stats: {
     flex: 1,
