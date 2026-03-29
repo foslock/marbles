@@ -27,11 +27,11 @@ const GROUND_WORLD_Y = 448;
 const SLIDER_SCREEN_Y = 52;
 
 // Tower top should approach this screen Y once the tower is tall enough.
-const TARGET_TOP_SCREEN_Y = Math.round(SCREEN_H * 0.35); // 182
+const TARGET_TOP_SCREEN_Y = Math.round(SCREEN_H * 0.5); // 260
 
 // px/s
-const INITIAL_SPEED = 90;
-const SPEED_INC    = 14;
+const INITIAL_SPEED = 140;
+const SPEED_INC    = 24;
 const MAX_SPEED    = 500;
 
 const INITIAL_WIDTH = 220;
@@ -120,10 +120,14 @@ export function TowerBuilder({ onScoreUpdate, config }: MinigameComponentProps) 
   const droppingRef  = useRef(false);
   const gameOverRef  = useRef(false);
   const [gameOver,   setGameOver]  = useState(false);
+  const [canRetry,   setCanRetry]  = useState(false);
+  const crashTimeRef = useRef(0);
 
   // ── Score ──
-  const scoreRef = useRef(0);
-  const [score,  setScore] = useState(0);
+  const scoreRef    = useRef(0);
+  const bestScoreRef = useRef(0);
+  const [score,     setScore]     = useState(0);
+  const [bestScore, setBestScore] = useState(0);
 
   // ── Flash ──
   const [flash, setFlash] = useState<{ pts: number; worldX: number; towerLen: number } | null>(null);
@@ -165,8 +169,14 @@ export function TowerBuilder({ onScoreUpdate, config }: MinigameComponentProps) 
           pendingLandRef.current = null;
 
           if (!pending || pending.newBlock === null) {
+            if (scoreRef.current > bestScoreRef.current) {
+              bestScoreRef.current = scoreRef.current;
+              setBestScore(scoreRef.current);
+            }
             gameOverRef.current = true;
+            crashTimeRef.current = Date.now();
             setGameOver(true);
+            setTimeout(() => setCanRetry(true), 1000);
           } else {
             const newTower = [...towerRef.current, pending.newBlock];
             towerRef.current = newTower;
@@ -197,7 +207,36 @@ export function TowerBuilder({ onScoreUpdate, config }: MinigameComponentProps) 
 
   // ── Tap handler ───────────────────────────────────────────────────────────
   const handleTap = useCallback(() => {
-    if (droppingRef.current || gameOverRef.current) return;
+    if (gameOverRef.current) {
+      if (Date.now() - crashTimeRef.current >= 1000) {
+        // Reset for new game
+        sliderXRef.current     = (W - INITIAL_WIDTH) / 2;
+        sliderWidthRef.current = INITIAL_WIDTH;
+        sliderDirRef.current   = 1;
+        speedRef.current       = INITIAL_SPEED + (seed % 10) * 3;
+        colorIdxRef.current    = seed % COLORS.length;
+        towerRef.current       = [];
+        dropAnimRef.current    = null;
+        pendingLandRef.current = null;
+        droppingRef.current    = false;
+        gameOverRef.current    = false;
+        scoreRef.current       = 0;
+        lastTRef.current       = 0;
+
+        setSliderX(sliderXRef.current);
+        setSliderW(INITIAL_WIDTH);
+        setSliderCol(COLORS[colorIdxRef.current]);
+        setTower([]);
+        setViewOff(0);
+        setDropAnim(null);
+        setGameOver(false);
+        setScore(0);
+        setFlash(null);
+        setCanRetry(false);
+      }
+      return;
+    }
+    if (droppingRef.current) return;
     droppingRef.current = true;
 
     const x          = sliderXRef.current;
@@ -283,7 +322,7 @@ export function TowerBuilder({ onScoreUpdate, config }: MinigameComponentProps) 
     const endY = landingScreenY(n);
     dropAnimRef.current = { x, width: w, color, startY, endY, t: 0, miss: false };
     setDropAnim(dropAnimRef.current);
-  }, [onScoreUpdate]);
+  }, [onScoreUpdate, seed]);
 
   // ── Derived render values ─────────────────────────────────────────────────
   const dropY = dropAnim
@@ -300,7 +339,7 @@ export function TowerBuilder({ onScoreUpdate, config }: MinigameComponentProps) 
         background: 'linear-gradient(180deg, #060f1e 0%, #0a192f 60%, #0d2137 100%)',
         borderRadius: '14px', flexShrink: 0,
       }}
-      onPointerDown={!gameOver ? handleTap : undefined}
+      onPointerDown={handleTap}
     >
       {/* Score — always on top */}
       <span style={styles.scoreDisplay}>{score}</span>
@@ -405,6 +444,10 @@ export function TowerBuilder({ onScoreUpdate, config }: MinigameComponentProps) 
           <span style={styles.gameOverTitle}>GAME OVER</span>
           <span style={styles.gameOverScore}>{score}</span>
           <span style={styles.gameOverSub}>Total area stacked</span>
+          {bestScore > 0 && <span style={styles.gameOverBest}>Best: {bestScore}</span>}
+          <span style={{ ...styles.gameOverSub, marginTop: 8, opacity: canRetry ? 1 : 0, transition: 'opacity 0.4s' }}>
+            Tap to retry
+          </span>
         </div>
       )}
 
@@ -428,6 +471,7 @@ const styles: Record<string, React.CSSProperties> = {
   gameOverTitle: { color: '#e74c3c', fontSize: '30px', fontWeight: 900, letterSpacing: '2px' },
   gameOverScore: { color: '#f39c12', fontSize: '52px', fontWeight: 800, lineHeight: 1.1 },
   gameOverSub:   { color: '#8892b0', fontSize: '14px' },
+  gameOverBest:  { color: '#2ecc71', fontSize: '13px', fontWeight: 700 },
   hint: {
     position: 'absolute', bottom: 10, left: 0, right: 0, zIndex: 10,
     textAlign: 'center', color: '#5a6a8a',

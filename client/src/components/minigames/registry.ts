@@ -18,7 +18,7 @@ import { SwipeDodge } from './SwipeDodge';
 import { SizeMatch } from './SizeMatch';
 import { TiltChase } from './TiltChase';
 import { TowerBuilder } from './TowerBuilder';
-import { ColorSort } from './ColorSort';
+import { ColorDrop } from './ColorDrop';
 import { MarbleRunner } from './MarbleRunner';
 import { LightSwitch } from './LightSwitch';
 import { PumpIt } from './PumpIt';
@@ -39,7 +39,7 @@ export const MINIGAME_REGISTRY: Record<string, ComponentType<MinigameComponentPr
   size_match: SizeMatch,
   accelerometer: TiltChase,
   tower_builder: TowerBuilder,
-  color_sort: ColorSort,
+  color_drop: ColorDrop,
   marble_runner: MarbleRunner,
   light_switch: LightSwitch,
   pump_it: PumpIt,

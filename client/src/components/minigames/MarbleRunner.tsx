@@ -7,8 +7,8 @@ const W = 300;
 const H = 400;
 const GROUND_Y = 330;            // top of ground surface
 const MARBLE_R = 18;             // normal marble radius
-const DUCK_RY = 9;               // vertical radius while ducking
-const DUCK_RX = 24;              // horizontal radius while ducking (wider)
+const DUCK_RY = 9;               // vertical radius while ducking (squished vertically)
+const DUCK_RX = MARBLE_R;        // horizontal radius while ducking (same as normal)
 const STAND_Y = GROUND_Y - MARBLE_R; // 312 — marble centre Y when standing
 
 // Jump physics
@@ -102,6 +102,8 @@ export function MarbleRunner({ onScoreUpdate, config }: MinigameComponentProps) 
   const duckTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const gameOverRef = useRef(false);
   const scoreRef    = useRef(0);
+  const bestScoreRef = useRef(0);
+  const crashTimeRef = useRef(0);
   const startTimeRef = useRef(Date.now());
   const lastTRef    = useRef(0);
   const rafRef      = useRef(0);
@@ -112,6 +114,8 @@ export function MarbleRunner({ onScoreUpdate, config }: MinigameComponentProps) 
   const [worldOff,   setWorldOff]   = useState(0);
   const [score,      setScore]      = useState(0);
   const [gameOver,   setGameOver]   = useState(false);
+  const [canRetry,   setCanRetry]   = useState(false);
+  const [bestScore,  setBestScore]  = useState(0);
 
   // Pointer tracking for gesture detection
   const ptrStartRef = useRef<{ x: number; y: number } | null>(null);
@@ -141,7 +145,10 @@ export function MarbleRunner({ onScoreUpdate, config }: MinigameComponentProps) 
   // ── RAF loop ─────────────────────────────────────────────────────────────────
   useEffect(() => {
     const tick = (now: number) => {
-      if (gameOverRef.current) return;
+      if (gameOverRef.current) {
+        rafRef.current = requestAnimationFrame(tick);
+        return;
+      }
 
       const dt = lastTRef.current ? Math.min((now - lastTRef.current) / 1000, 0.05) : 0;
       lastTRef.current = now;
@@ -185,9 +192,14 @@ export function MarbleRunner({ onScoreUpdate, config }: MinigameComponentProps) 
 
         if (checkCollision(playerWorldX, marbleYRef.current, stateRef.current, obs)) {
           SFX.minigameHit();
+          if (scoreRef.current > bestScoreRef.current) {
+            bestScoreRef.current = scoreRef.current;
+            setBestScore(scoreRef.current);
+          }
           gameOverRef.current = true;
+          crashTimeRef.current = Date.now();
           setGameOver(true);
-          cancelAnimationFrame(rafRef.current);
+          setTimeout(() => setCanRetry(true), 1000);
           return;
         }
       }
@@ -203,8 +215,32 @@ export function MarbleRunner({ onScoreUpdate, config }: MinigameComponentProps) 
 
   // ── Pointer handlers ─────────────────────────────────────────────────────────
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
+    if (gameOverRef.current) {
+      // Restart if 1s has elapsed since crash
+      if (Date.now() - crashTimeRef.current >= 1000) {
+        // Reset physics refs
+        worldOffRef.current = 0;
+        marbleYRef.current = STAND_Y;
+        jumpVyRef.current = 0;
+        stateRef.current = 'normal';
+        gameOverRef.current = false;
+        scoreRef.current = 0;
+        startTimeRef.current = Date.now();
+        lastTRef.current = 0;
+        if (duckTimerRef.current) { clearTimeout(duckTimerRef.current); duckTimerRef.current = null; }
+        levelRef.current = buildLevel(seed);
+        // Reset render state
+        setWorldOff(0);
+        setMarbleY(STAND_Y);
+        setMarbleState('normal');
+        setScore(0);
+        setGameOver(false);
+        setCanRetry(false);
+      }
+      return;
+    }
     ptrStartRef.current = { x: e.clientX, y: e.clientY };
-  }, []);
+  }, [seed]);
 
   const handlePointerUp = useCallback((e: React.PointerEvent) => {
     if (!ptrStartRef.current) return;
@@ -225,9 +261,6 @@ export function MarbleRunner({ onScoreUpdate, config }: MinigameComponentProps) 
     const sx = o.worldX - worldOff;
     return sx > -80 && sx < W + 20;
   });
-
-  // Marble rotation based on distance (decorative)
-  const rotation = Math.floor(worldOff / 2) % 360;
 
   return (
     <div
@@ -314,7 +347,6 @@ export function MarbleRunner({ onScoreUpdate, config }: MinigameComponentProps) 
         borderRadius: '50%',
         background: 'radial-gradient(circle at 35% 35%, #74b9e8, #2471a3)',
         boxShadow: '0 0 14px rgba(52,152,219,0.85)',
-        transform: `rotate(${rotation}deg)`,
         transition: 'width 0.07s, height 0.07s, top 0.02s',
         pointerEvents: 'none',
       }} />
@@ -325,6 +357,10 @@ export function MarbleRunner({ onScoreUpdate, config }: MinigameComponentProps) 
           <span style={styles.gameOverTitle}>CRASHED!</span>
           <span style={styles.gameOverScore}>{score}</span>
           <span style={styles.gameOverSub}>Distance score</span>
+          {bestScore > 0 && <span style={styles.gameOverBest}>Best: {bestScore}</span>}
+          <span style={{ ...styles.gameOverSub, marginTop: 8, opacity: canRetry ? 1 : 0, transition: 'opacity 0.4s' }}>
+            Tap to retry
+          </span>
         </div>
       )}
 
@@ -368,4 +404,5 @@ const styles: Record<string, React.CSSProperties> = {
   gameOverTitle: { color: '#e74c3c', fontSize: '30px', fontWeight: 900, letterSpacing: '2px' },
   gameOverScore: { color: '#f39c12', fontSize: '52px', fontWeight: 800, lineHeight: 1.1 },
   gameOverSub:   { color: '#8892b0', fontSize: '14px' },
+  gameOverBest:  { color: '#2ecc71', fontSize: '13px', fontWeight: 700 },
 };

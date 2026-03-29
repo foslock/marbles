@@ -16,11 +16,11 @@ const PLAYTEST_MINIGAMES = [
   { id: 'memory_flash', name: 'Memory Flash', instructions: 'Colored tiles flash in a sequence. Repeat the sequence from memory. Longest correct streak wins!', duration: 12000, type: 'memory' },
   { id: 'swipe_dodge', name: 'Swipe Dodge', instructions: 'Swipe left/right to dodge falling obstacles. Dodge as many as possible!', duration: 20000, type: 'dodge' },
   { id: 'target_pop', name: 'Target Pop', instructions: 'Targets appear randomly on screen. Tap them before they disappear. Most pops wins!', duration: 5000, type: 'target_tap' },
-  { id: 'tower_builder', name: 'Tower Builder', instructions: 'A block slides back and forth. Tap to drop it — overlap with the block below is kept. Stack as high as possible!', duration: 90000, type: 'tower_builder' },
-  { id: 'color_sort', name: 'Color Sort', instructions: 'A marble falls from the top. Tap the matching coloured bucket before it hits the ground!', duration: 18000, type: 'color_sort' },
+  { id: 'tower_builder', name: 'Tower Builder', instructions: 'A block slides back and forth. Tap to drop it — overlap with the block below is kept. Stack as high as possible!', duration: 45000, type: 'tower_builder' },
+  { id: 'color_drop', name: 'Color Drop', instructions: 'A marble falls from the top. Tap the matching coloured bucket before it hits the ground!', duration: 18000, type: 'color_drop' },
   { id: 'marble_runner', name: 'Marble Runner', instructions: 'Your marble rolls forward automatically. Swipe up to jump over ground spikes, swipe down to duck under ceiling bars!', duration: 30000, type: 'marble_runner' },
   { id: 'light_switch', name: 'Light Switch', instructions: 'Swipe up to turn the light ON, swipe down to turn it OFF. Flick as many times as possible!', duration: 7000, type: 'light_switch' },
-  { id: 'pump_it', name: 'Pump It', instructions: 'Drag the pump handle down to inflate the balloon. It slowly deflates — keep pumping to hold it full!', duration: 12000, type: 'pump_it' },
+  { id: 'pump_it', name: 'Pump It', instructions: 'Drag the pump handle DOWN then back UP to pump. Keep pumping to push past 100%!', duration: 12000, type: 'pump_it' },
 ];
 
 function makePlaytestConfig(type: string): Record<string, unknown> {
@@ -35,7 +35,7 @@ function makePlaytestConfig(type: string): Record<string, unknown> {
     case 'memory': return { sequence: Array.from({ length: 16 }, () => rand(0, 3)) };
     case 'dodge': return { seed: rand(0, 999999) };
     case 'tower_builder': return { seed: rand(0, 999999) };
-    case 'color_sort': return { seed: rand(0, 999999) };
+    case 'color_drop': return { seed: rand(0, 999999) };
     case 'marble_runner': return { seed: rand(0, 999999) };
     default: return {};
   }
