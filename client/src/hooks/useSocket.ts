@@ -19,6 +19,7 @@ export function useSocket() {
   const socketRef = useRef<Socket | null>(null);
   const playerIdRef = useRef<string | null>(null);
   const [connected, setConnected] = useState(false);
+  const [connectionError, setConnectionError] = useState<{ message: string; details: string } | null>(null);
   const [phase, setPhase] = useState<GamePhase>('home');
   const [playerId, setPlayerId] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -39,8 +40,20 @@ export function useSocket() {
     });
     socketRef.current = socket;
 
+    const CONNECTION_TIMEOUT_MS = 10_000;
+    const timeoutId = setTimeout(() => {
+      if (!socket.connected) {
+        setConnectionError({
+          message: 'Connection timed out',
+          details: `Could not reach the server at ${SOCKET_URL || window.location.origin} after ${CONNECTION_TIMEOUT_MS / 1000}s. The server may be down or unreachable.`,
+        });
+      }
+    }, CONNECTION_TIMEOUT_MS);
+
     socket.on('connect', () => {
+      clearTimeout(timeoutId);
       setConnected(true);
+      setConnectionError(null);
       // Auto-reconnect if we have stored session info
       const savedSession = sessionStorage.getItem('ltm_session');
       if (savedSession) {
@@ -51,6 +64,12 @@ export function useSocket() {
           }
         } catch {}
       }
+    });
+    socket.on('connect_error', (err) => {
+      setConnectionError({
+        message: 'Failed to connect to server',
+        details: err.message || String(err),
+      });
     });
     socket.on('disconnect', () => setConnected(false));
     socket.on('error', (data: { message: string }) => setError(data.message));
@@ -179,6 +198,7 @@ export function useSocket() {
     });
 
     return () => {
+      clearTimeout(timeoutId);
       socket.disconnect();
     };
   }, []);
@@ -223,6 +243,7 @@ export function useSocket() {
 
   return {
     connected,
+    connectionError,
     phase,
     playerId,
     sessionId,
