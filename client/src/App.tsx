@@ -80,8 +80,9 @@ export default function App() {
         />
       )}
 
-      {/* Spectators get the large TV-optimized view */}
-      {socket.phase === 'playing' && socket.gameState && isSpectator && (
+      {/* Spectators get the large TV-optimized view.
+          Also shown during minigame phase — spectators watch but don't play. */}
+      {(socket.phase === 'playing' || socket.phase === 'minigame') && socket.gameState && isSpectator && (
         <SpectatorView
           gameState={socket.gameState}
           tileEffect={socket.tileEffect}

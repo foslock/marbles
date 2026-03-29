@@ -2,8 +2,8 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import type { MinigameComponentProps } from './types';
 
 const COLORS = ['#e74c3c', '#3498db', '#2ecc71', '#f39c12'];
-const FLASH_DURATION = 600;
-const GAP_DURATION = 200;
+const FLASH_DURATION = 350;
+const GAP_DURATION = 80;
 
 export function MemoryFlash({ onScoreUpdate, config }: MinigameComponentProps) {
   // Server sends the full sequence; all players memorize the same pattern
@@ -120,5 +120,7 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: '16px', border: '3px solid',
     transition: 'background 0.15s, transform 0.15s',
     cursor: 'pointer',
+    touchAction: 'none',
+    WebkitTapHighlightColor: 'transparent',
   },
 };

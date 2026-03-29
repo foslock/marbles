@@ -48,24 +48,26 @@ export function SpectatorView({
     ? gameState.players[gameState.currentTurnPlayerId]
     : null;
 
-  // Auto-dismiss overlays so they never get permanently stuck
+  // Auto-dismiss overlays so they never get permanently stuck.
+  // Don't start the countdown while the move animation is still running —
+  // wait until it clears so the timer begins only once the overlay is visible.
   useEffect(() => {
-    if (!tileEffect) return;
+    if (!tileEffect || moveAnimation) return;
     const timer = setTimeout(() => {
       onClearTileEffect();
       onTurnComplete();
     }, 10000);
     return () => clearTimeout(timer);
-  }, [tileEffect, onClearTileEffect, onTurnComplete]);
+  }, [tileEffect, moveAnimation, onClearTileEffect, onTurnComplete]);
 
   useEffect(() => {
-    if (!minigameResults) return;
+    if (!minigameResults || moveAnimation) return;
     const timer = setTimeout(() => {
       onClearMinigameResults();
       onTurnComplete();
     }, 10000);
     return () => clearTimeout(timer);
-  }, [minigameResults, onClearMinigameResults, onTurnComplete]);
+  }, [minigameResults, moveAnimation, onClearMinigameResults, onTurnComplete]);
 
   return (
     <div style={styles.container}>
@@ -95,8 +97,10 @@ export function SpectatorView({
           )}
         </div>
 
-        {/* Event overlay - shows tile effects, battles, minigame results prominently */}
-        {tileEffect && (
+        {/* Event overlay - shows tile effects, battles, minigame results prominently.
+            Gated on moveAnimation being null so the popup never covers the
+            movement animation mid-flight. */}
+        {tileEffect && !moveAnimation && (
           <div style={styles.eventOverlay}>
             <div style={{
               ...styles.eventCard,
@@ -109,7 +113,7 @@ export function SpectatorView({
           </div>
         )}
 
-        {minigameResults && (
+        {minigameResults && !moveAnimation && (
           <div style={styles.eventOverlay}>
             <div style={{ ...styles.eventCard, borderColor: '#f39c12' }}>
               <h3 style={styles.podiumTitle}>Minigame Results!</h3>
