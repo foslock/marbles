@@ -138,12 +138,12 @@ MINIGAMES = [
         "type": "target_tap",
     },
     {
-        "id": "marble_stack",
-        "name": "Marble Stack",
-        "description": "Stack the marbles as high as you can!",
-        "instructions": "A marble swings back and forth. Tap when it's centred to drop it on the stack. Closer to centre = more points!",
-        "duration": 20000,
-        "type": "marble_stack",
+        "id": "tower_builder",
+        "name": "Tower Builder",
+        "description": "Stack the blocks as high as you can!",
+        "instructions": "A rectangle slides left and right. Tap to drop it. Only the part that lands on the tower stays — the rest falls off. Miss completely and the game ends!",
+        "duration": 90000,
+        "type": "tower_builder",
     },
     {
         "id": "color_sort",

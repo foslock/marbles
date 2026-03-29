@@ -17,7 +17,7 @@ import { MemoryFlash } from './MemoryFlash';
 import { SwipeDodge } from './SwipeDodge';
 import { SizeMatch } from './SizeMatch';
 import { TiltChase } from './TiltChase';
-import { MarbleStack } from './MarbleStack';
+import { TowerBuilder } from './TowerBuilder';
 import { ColorSort } from './ColorSort';
 
 /**
@@ -35,6 +35,6 @@ export const MINIGAME_REGISTRY: Record<string, ComponentType<MinigameComponentPr
   dodge: SwipeDodge,
   size_match: SizeMatch,
   accelerometer: TiltChase,
-  marble_stack: MarbleStack,
+  tower_builder: TowerBuilder,
   color_sort: ColorSort,
 };
