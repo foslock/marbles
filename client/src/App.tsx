@@ -27,7 +27,7 @@ export default function App() {
   }, [socket.lobby, socket.playerId]);
 
   return (
-    <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+    <div style={{ width: '100%', height: '100%', position: 'relative', userSelect: 'none', WebkitUserSelect: 'none' }}>
       {!socket.connected && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 1000 }}>
           <div

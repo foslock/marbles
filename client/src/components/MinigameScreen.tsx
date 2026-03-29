@@ -125,6 +125,8 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     flexDirection: 'column',
     background: '#0a192f',
+    userSelect: 'none',
+    WebkitUserSelect: 'none',
   },
   countdownContainer: {
     flex: 1,
