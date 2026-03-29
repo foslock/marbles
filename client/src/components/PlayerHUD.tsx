@@ -52,10 +52,10 @@ export function PlayerHUD({ player }: Props) {
             <span style={styles.modBad}>🎲↓</span>
           )}
           {player.modifiers.short_stop > 0 && (
-            <span style={styles.modGood}>🛑</span>
+            <span style={styles.modGood}>🎯</span>
           )}
           {player.modifiers.dizzy > 0 && (
-            <span style={styles.modBad}>💫</span>
+            <span style={styles.modBad}>😵‍💫</span>
           )}
         </div>
       )}
