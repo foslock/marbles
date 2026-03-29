@@ -22,7 +22,7 @@ services:
     buildCommand: npm install && npm run build
     envVars:
       - key: VITE_SOCKET_URL
-        value: 'https://ltm-server.onrender.com'
+        value: 'https://ltm-server-z6hn.onrender.com'
     staticPublishPath: dist
     headers:
       - path: /*
