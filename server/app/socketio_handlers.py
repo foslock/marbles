@@ -532,10 +532,6 @@ async def submit_minigame_score(sid, data):
     if not hasattr(session, "_minigame_participants"):
         session._minigame_participants = []
 
-    # Only accept scores from actual participants
-    if player_id not in session._minigame_participants:
-        return
-
     session._minigame_scores[player_id] = score
 
     # Check if all participants have submitted
@@ -604,22 +600,25 @@ async def _perform_tile_swap(session, player_id):
 
 
 async def _start_minigame(session, battle):
-    """Start a minigame from a battle. Handles CPU auto-scoring and all-CPU resolution."""
+    """Start a minigame from a battle. ALL players participate, not just those on the tile."""
     minigame = select_random_minigame()
     bonus = battle.get("bonus", False)
-    session._minigame_participants = battle["participants"]
+
+    # All non-spectator players participate in every minigame
+    all_players = [p.id for p in session.get_players()]
+    session._minigame_participants = all_players
     session._minigame_scores = {}
     session._minigame_bonus = bonus
 
     await sio.emit("minigame_start", {
         "minigame": minigame,
-        "participants": battle["participants"],
+        "participants": all_players,
         "message": battle["message"],
         "bonus": bonus,
     }, room=session.id)
 
     # Auto-submit scores for any CPU participants immediately
-    for pid in battle["participants"]:
+    for pid in all_players:
         p = session.players.get(pid)
         if p and p.is_cpu:
             session._minigame_scores[pid] = cpu_minigame_score(minigame["type"])
