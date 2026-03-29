@@ -60,12 +60,15 @@ export function PumpIt({ onScoreUpdate }: MinigameComponentProps) {
   // ── Pointer handlers ────────────────────────────────────────────────────────
   const onPointerDown = useCallback((e: React.PointerEvent) => {
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    // Track continuous drag: store the current clientY so every move is relative
+    // to the previous position, not the initial touch point.
     dragRef.current = { startY: e.clientY, startOffset: handleOffRef.current };
   }, []);
 
   const onPointerMove = useCallback((e: React.PointerEvent) => {
     if (!dragRef.current) return;
 
+    // Continuously track finger position relative to where the drag started
     const dy      = e.clientY - dragRef.current.startY;
     const newOff  = Math.max(0, Math.min(HANDLE_TRAVEL, dragRef.current.startOffset + dy));
     const downPx  = newOff - handleOffRef.current;
@@ -100,13 +103,17 @@ export function PumpIt({ onScoreUpdate }: MinigameComponentProps) {
   }, []);
 
   const onPointerUp = useCallback(() => {
-    // Don't auto-reset handle — let it stay where released
+    // Spring the handle back to the top so the player can immediately push down again
+    handleOffRef.current = 0;
+    setHandleOffset(0);
+    canInflateRef.current = true;
+    firedRef.current = false;
     dragRef.current = null;
   }, []);
 
   // ── Derived visuals ─────────────────────────────────────────────────────────
-  // Visual caps at 100 air (full balloon), but score continues to 200
-  const airFrac   = Math.min(1, air / 100);
+  // Balloon grows visually all the way to MAX_AIR (200)
+  const airFrac   = Math.min(1, air / MAX_AIR);
   const balloonR  = MIN_R + (MAX_R - MIN_R) * airFrac;
 
   // Balloon colour: deep red, brightens slightly when fuller
@@ -248,7 +255,7 @@ export function PumpIt({ onScoreUpdate }: MinigameComponentProps) {
             <div style={{
               position: 'absolute',
               bottom: 0, left: 4, right: 4,
-              height: `${air}%`,
+              height: `${Math.min(100, air / MAX_AIR * 100)}%`,
               background: `hsl(${hue}, 80%, 52%)`,
               borderRadius: '2px 2px 0 0',
               opacity: 0.55,

@@ -120,7 +120,7 @@ MINIGAMES = [
         "name": "Memory Flash",
         "description": "Remember the sequence!",
         "instructions": "Colored tiles flash in a sequence. Repeat the sequence from memory. Longest correct streak wins!",
-        "duration": 12000,
+        "duration": 24000,
         "type": "memory",
     },
     {

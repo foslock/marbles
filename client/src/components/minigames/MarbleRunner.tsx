@@ -119,10 +119,16 @@ export function MarbleRunner({ onScoreUpdate, config }: MinigameComponentProps) 
 
   // Pointer tracking for gesture detection
   const ptrStartRef = useRef<{ x: number; y: number } | null>(null);
+  const gesturedRef = useRef(false); // true once a swipe gesture fired for this pointer
 
   // ── Actions ──────────────────────────────────────────────────────────────────
   const doJump = useCallback(() => {
-    if (stateRef.current !== 'normal') return;
+    // Allow jump to cancel an active duck (so the player isn't stuck)
+    if (stateRef.current === 'ducking') {
+      if (duckTimerRef.current) { clearTimeout(duckTimerRef.current); duckTimerRef.current = null; }
+    } else if (stateRef.current !== 'normal') {
+      return;
+    }
     stateRef.current = 'jumping';
     jumpVyRef.current = JUMP_VY;
     setMarbleState('jumping');
@@ -240,18 +246,30 @@ export function MarbleRunner({ onScoreUpdate, config }: MinigameComponentProps) 
       return;
     }
     ptrStartRef.current = { x: e.clientX, y: e.clientY };
+    gesturedRef.current = false;
   }, [seed]);
 
-  const handlePointerUp = useCallback((e: React.PointerEvent) => {
-    if (!ptrStartRef.current) return;
+  const handlePointerMove = useCallback((e: React.PointerEvent) => {
+    if (!ptrStartRef.current || gesturedRef.current) return;
     const dy = e.clientY - ptrStartRef.current.y;
-    ptrStartRef.current = null;
     if (dy > 28) {
+      gesturedRef.current = true;
       doDuck(650);
-    } else {
+    } else if (dy < -28) {
+      gesturedRef.current = true;
       doJump();
     }
   }, [doJump, doDuck]);
+
+  const handlePointerUp = useCallback(() => {
+    if (!ptrStartRef.current) return;
+    // If no swipe gesture was detected, treat as a tap → jump
+    if (!gesturedRef.current) {
+      doJump();
+    }
+    ptrStartRef.current = null;
+    gesturedRef.current = false;
+  }, [doJump]);
 
   // ── Derived render values ─────────────────────────────────────────────────────
   const pRX = marbleState === 'ducking' ? DUCK_RX : MARBLE_R;
@@ -266,9 +284,10 @@ export function MarbleRunner({ onScoreUpdate, config }: MinigameComponentProps) 
     <div
       style={{ ...styles.container, width: W, height: H }}
       onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
-      onPointerLeave={() => { ptrStartRef.current = null; }}
-      onPointerCancel={() => { ptrStartRef.current = null; }}
+      onPointerLeave={() => { ptrStartRef.current = null; gesturedRef.current = false; }}
+      onPointerCancel={() => { ptrStartRef.current = null; gesturedRef.current = false; }}
     >
       {/* Score */}
       <span style={styles.scoreDisplay}>{score}</span>

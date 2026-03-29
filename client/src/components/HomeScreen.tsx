@@ -13,7 +13,7 @@ const PLAYTEST_MINIGAMES = [
   { id: 'tilt_chase', name: 'Tilt Chase', instructions: 'Tilt your device to guide your dot to follow the target dot.', duration: 7000, type: 'accelerometer' },
   { id: 'reaction_snap', name: 'Reaction Snap', instructions: 'Wait for the screen to turn green, then tap as fast as possible. Fastest reaction wins!', duration: 5000, type: 'reaction' },
   { id: 'size_judge', name: 'Size Matters', instructions: 'A circle appears — drag or pinch to match its size exactly. Closest match wins!', duration: 6000, type: 'size_match' },
-  { id: 'memory_flash', name: 'Memory Flash', instructions: 'Colored tiles flash in a sequence. Repeat the sequence from memory. Longest correct streak wins!', duration: 12000, type: 'memory' },
+  { id: 'memory_flash', name: 'Memory Flash', instructions: 'Colored tiles flash in a sequence. Repeat the sequence from memory. Longest correct streak wins!', duration: 24000, type: 'memory' },
   { id: 'swipe_dodge', name: 'Swipe Dodge', instructions: 'Swipe left/right to dodge falling obstacles. Dodge as many as possible!', duration: 20000, type: 'dodge' },
   { id: 'target_pop', name: 'Target Pop', instructions: 'Targets appear randomly on screen. Tap them before they disappear. Most pops wins!', duration: 5000, type: 'target_tap' },
   { id: 'tower_builder', name: 'Tower Builder', instructions: 'A block slides back and forth. Tap to drop it — overlap with the block below is kept. Stack as high as possible!', duration: 45000, type: 'tower_builder' },
