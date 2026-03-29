@@ -27,7 +27,6 @@ def process_tile_effect(
         player.modifiers["protection"] -= 1
         result["blocked"] = True
         result["message"] = "Your protection shield blocked this negative effect!"
-        result["boardUpdates"] = _swap_tile_effect(session, tile.id)
         return result
 
     match tile.effect:
@@ -143,9 +142,6 @@ def process_tile_effect(
         result["autoMarbles"] = new_marbles
         result["message"] += f" +{new_marbles} marble(s) from points!"
 
-    # Swap tile effect with another of the same type
-    result["boardUpdates"] = _swap_tile_effect(session, tile.id)
-
     return result
 
 
@@ -203,7 +199,7 @@ def _get_other_player_options(session: GameSession, player: PlayerState) -> list
     ]
 
 
-def _swap_tile_effect(session: GameSession, tile_id: int) -> list[dict]:
+def swap_tile_effect(session: GameSession, tile_id: int) -> list[dict]:
     """Move a positive/negative tile's effect to a random unoccupied neutral tile.
 
     The original tile becomes neutral. The target neutral tile gets a randomly

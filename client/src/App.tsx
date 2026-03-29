@@ -87,10 +87,12 @@ export default function App() {
           tileEffect={socket.tileEffect}
           minigameResults={socket.minigameResults}
           moveAnimation={socket.moveAnimation}
+          tileSwapAnimation={socket.tileSwapAnimation}
           activityFeed={socket.activityFeed}
           onClearMoveAnimation={socket.clearMoveAnimation}
           onClearTileEffect={socket.clearTileEffect}
           onClearMinigameResults={socket.clearMinigameResults}
+          onClearTileSwapAnimation={socket.clearTileSwapAnimation}
         />
       )}
 
@@ -104,6 +106,7 @@ export default function App() {
           minigameResults={socket.minigameResults}
           awaitingChoice={socket.awaitingChoice}
           moveAnimation={socket.moveAnimation}
+          tileSwapAnimation={socket.tileSwapAnimation}
           activityFeed={socket.activityFeed}
           onRollDice={socket.rollDice}
           onChooseMove={socket.chooseMove}
@@ -111,6 +114,8 @@ export default function App() {
           onClearTileEffect={socket.clearTileEffect}
           onClearMinigameResults={socket.clearMinigameResults}
           onClearMoveAnimation={socket.clearMoveAnimation}
+          onClearTileSwapAnimation={socket.clearTileSwapAnimation}
+          onTurnComplete={socket.turnComplete}
           onEndGame={socket.endGame}
         />
       )}

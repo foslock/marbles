@@ -1,6 +1,6 @@
 import { useMemo, useEffect } from 'react';
 import type { GameState, MinigameResults, TileEffect, ActivityItem } from '../types/game';
-import { GameBoard, type MoveAnimation } from './GameBoard';
+import { GameBoard, type MoveAnimation, type TileSwapAnimation } from './GameBoard';
 import { ActivityFeed } from './ActivityFeed';
 
 interface Props {
@@ -8,10 +8,12 @@ interface Props {
   tileEffect: TileEffect | null;
   minigameResults: MinigameResults | null;
   moveAnimation: MoveAnimation | null;
+  tileSwapAnimation: TileSwapAnimation | null;
   activityFeed: ActivityItem[];
   onClearMoveAnimation: () => void;
   onClearTileEffect: () => void;
   onClearMinigameResults: () => void;
+  onClearTileSwapAnimation: () => void;
 }
 
 /**
@@ -24,10 +26,12 @@ export function SpectatorView({
   tileEffect,
   minigameResults,
   moveAnimation,
+  tileSwapAnimation,
   activityFeed,
   onClearMoveAnimation,
   onClearTileEffect,
   onClearMinigameResults,
+  onClearTileSwapAnimation,
 }: Props) {
   const sortedPlayers = useMemo(() => {
     return Object.values(gameState.players)
@@ -65,6 +69,8 @@ export function SpectatorView({
           reachableTiles={[]}
           moveAnimation={moveAnimation}
           onAnimationComplete={onClearMoveAnimation}
+          tileSwapAnimation={tileSwapAnimation}
+          onSwapAnimationComplete={onClearTileSwapAnimation}
         />
 
         {/* Activity feed — bottom-left, tappable to expand full history */}

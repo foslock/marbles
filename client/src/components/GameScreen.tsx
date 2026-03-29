@@ -6,7 +6,7 @@ import type {
   MinigameResults,
   ActivityItem,
 } from '../types/game';
-import { GameBoard, type MoveAnimation } from './GameBoard';
+import { GameBoard, type MoveAnimation, type TileSwapAnimation } from './GameBoard';
 import { DiceRoller } from './DiceRoller';
 import { TileEffectOverlay } from './TileEffectOverlay';
 import { MinigameResultsOverlay } from './MinigameResultsOverlay';
@@ -22,6 +22,7 @@ interface Props {
   minigameResults: MinigameResults | null;
   awaitingChoice: TileEffect | null;
   moveAnimation: MoveAnimation | null;
+  tileSwapAnimation: TileSwapAnimation | null;
   activityFeed: ActivityItem[];
   onRollDice: (useReroll?: boolean) => void;
   onChooseMove: (tileId: number, path?: number[]) => void;
@@ -29,6 +30,8 @@ interface Props {
   onClearTileEffect: () => void;
   onClearMinigameResults: () => void;
   onClearMoveAnimation: () => void;
+  onClearTileSwapAnimation: () => void;
+  onTurnComplete: () => void;
   onEndGame: () => void;
 }
 
@@ -40,6 +43,7 @@ export function GameScreen({
   minigameResults,
   awaitingChoice,
   moveAnimation,
+  tileSwapAnimation,
   activityFeed,
   onRollDice,
   onChooseMove,
@@ -47,6 +51,8 @@ export function GameScreen({
   onClearTileEffect,
   onClearMinigameResults,
   onClearMoveAnimation,
+  onClearTileSwapAnimation,
+  onTurnComplete,
   onEndGame,
 }: Props) {
   const [showScoreboard, setShowScoreboard] = useState(false);
@@ -81,7 +87,10 @@ export function GameScreen({
   const handleClearEffectToShow = useCallback(() => {
     setEffectToShow(null);
     onClearTileEffect();
-  }, [onClearTileEffect]);
+    // Signal server that this turn's overlays are done — triggers swap + advance.
+    // Every client sends this; the server ignores duplicates via _pending_turn_player_id.
+    onTurnComplete();
+  }, [onClearTileEffect, onTurnComplete]);
 
   // ── Delayed turn transition ──────────────────────────────────────────────
   // Keep the board centred on the current player and freeze the top-bar /
@@ -163,6 +172,8 @@ export function GameScreen({
             onAnimationComplete={handleAnimationComplete}
             myPlayerId={playerId}
             activePlayerId={displayedTurnPlayerId}
+            tileSwapAnimation={tileSwapAnimation}
+            onSwapAnimationComplete={onClearTileSwapAnimation}
           />
         )}
 

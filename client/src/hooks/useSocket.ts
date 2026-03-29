@@ -10,6 +10,7 @@ import type {
   MinigameResults,
   ActivityItem,
 } from '../types/game';
+import type { TileSwapAnimation } from '../components/GameBoard';
 import { SFX } from '../utils/sound';
 import { Haptics } from '../utils/haptics';
 
@@ -32,6 +33,7 @@ export function useSocket() {
   const [error, setError] = useState<string | null>(null);
   const [awaitingChoice, setAwaitingChoice] = useState<TileEffect | null>(null);
   const [moveAnimation, setMoveAnimation] = useState<{ playerId: string; path: number[] } | null>(null);
+  const [tileSwapAnimation, setTileSwapAnimation] = useState<TileSwapAnimation | null>(null);
   const [activityFeed, setActivityFeed] = useState<ActivityItem[]>([]);
 
   useEffect(() => {
@@ -136,19 +138,7 @@ export function useSocket() {
     });
 
     socket.on('tile_effect', (data: TileEffect) => {
-      if (data.boardUpdates && data.boardUpdates.length > 0) {
-        setGameState((prev) => {
-          if (!prev?.board) return prev;
-          const tiles = { ...prev.board.tiles };
-          for (const update of data.boardUpdates!) {
-            const key = String(update.id);
-            if (tiles[key]) {
-              tiles[key] = { ...tiles[key], color: update.color, category: update.category, effect: update.effect };
-            }
-          }
-          return { ...prev, board: { ...prev.board, tiles } };
-        });
-      }
+      // Board updates are now deferred — they arrive via tile_swap at end of turn
       setTileEffect(data);
       if (data.message && !data.requiresChoice) {
         const color: ActivityItem['color'] =
@@ -157,6 +147,31 @@ export function useSocket() {
           ...prev,
           { id: `te-${Date.now()}-${Math.random()}`, message: `${data.playerName}: ${data.message}`, color, timestamp: Date.now() },
         ]);
+      }
+    });
+
+    socket.on('tile_swap', (data: { sourceTileId: number; targetTileId: number | null; color: string; boardUpdates: { id: number; color: 'green' | 'red' | 'neutral'; category: string; effect: string }[] }) => {
+      // Apply board updates
+      if (data.boardUpdates && data.boardUpdates.length > 0) {
+        setGameState((prev) => {
+          if (!prev?.board) return prev;
+          const tiles = { ...prev.board.tiles };
+          for (const update of data.boardUpdates) {
+            const key = String(update.id);
+            if (tiles[key]) {
+              tiles[key] = { ...tiles[key], color: update.color, category: update.category, effect: update.effect };
+            }
+          }
+          return { ...prev, board: { ...prev.board, tiles } };
+        });
+      }
+      // Trigger swap animation if there's a target tile
+      if (data.targetTileId != null) {
+        setTileSwapAnimation({
+          sourceTileId: data.sourceTileId,
+          targetTileId: data.targetTileId,
+          color: data.color,
+        });
       }
     });
 
@@ -242,6 +257,7 @@ export function useSocket() {
       setMinigameResults(null);
       setAwaitingChoice(null);
       setMoveAnimation(null);
+      setTileSwapAnimation(null);
       setActivityFeed([]);
       setLobby(null);
       setPlayerId(null);
@@ -293,6 +309,10 @@ export function useSocket() {
     setPhase('playing');
   }, []);
   const clearMoveAnimation = useCallback(() => setMoveAnimation(null), []);
+  const clearTileSwapAnimation = useCallback(() => setTileSwapAnimation(null), []);
+  const turnComplete = useCallback(() => {
+    socketRef.current?.emit('turn_complete', {});
+  }, []);
   const endGame = useCallback(() => {
     socketRef.current?.emit('end_game', {});
   }, []);
@@ -316,6 +336,7 @@ export function useSocket() {
     error,
     awaitingChoice,
     moveAnimation,
+    tileSwapAnimation,
     activityFeed,
     createSession,
     joinSession,
@@ -328,6 +349,8 @@ export function useSocket() {
     clearTileEffect,
     clearMinigameResults,
     clearMoveAnimation,
+    clearTileSwapAnimation,
+    turnComplete,
     endGame,
     addCpuPlayer,
   };
