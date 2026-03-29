@@ -3,6 +3,7 @@
 import asyncio
 import random
 import logging
+from collections import deque
 import socketio
 
 from .game.state import session_manager, PlayerState
@@ -584,45 +585,38 @@ async def _run_cpu_turn_task(session, player):
 
 
 def _get_reachable_tiles(session, start_tile: int, steps: int) -> list[dict]:
-    """BFS to find all tiles reachable in exactly `steps` moves (forward or backward).
+    """BFS to find all tiles reachable in exactly `steps` moves without revisiting tiles.
 
-    Once a direction is chosen, the player cannot backtrack to the tile they just
-    came from. This ensures the player travels exactly `steps` tiles in a chosen
-    direction rather than zig-zagging to reach closer tiles.
+    Each candidate path carries the set of tiles it has already visited.
+    A neighbor is only followed if it hasn't been visited in the current path,
+    which prevents all zigzag/cycle paths and ensures the animation always
+    travels in one coherent direction.
     """
     if not session.board:
         return []
 
-    # BFS tracking: (current_tile, steps_remaining, path, came_from_tile)
-    # came_from prevents backtracking to the immediately previous tile
+    # Each entry: (current_tile, steps_remaining, path_list, path_set)
+    # path_set (frozenset) gives O(1) membership checks and is safe to share.
     results = []
-    visited = set()
-    queue = [(start_tile, steps, [start_tile], None)]
+    seen_destinations: set[int] = set()
+    queue: deque = deque([(start_tile, steps, [start_tile], frozenset([start_tile]))])
 
     while queue:
-        current, remaining, path, came_from = queue.pop(0)
+        current, remaining, path, path_set = queue.popleft()
 
         if remaining == 0:
-            if current != start_tile:  # Can't stay in place
-                results.append({
-                    "tileId": current,
-                    "path": path,
-                })
+            if current not in seen_destinations:
+                seen_destinations.add(current)
+                results.append({"tileId": current, "path": path})
             continue
 
         for neighbor in session.board.tiles[current].neighbors:
-            if neighbor == came_from:
-                continue  # No backtracking to the tile we just came from
-            state = (neighbor, remaining - 1, current)
-            if state not in visited:
-                visited.add(state)
-                queue.append((neighbor, remaining - 1, path + [neighbor], current))
+            if neighbor not in path_set:
+                queue.append((
+                    neighbor,
+                    remaining - 1,
+                    path + [neighbor],
+                    path_set | {neighbor},
+                ))
 
-    # Deduplicate by tile ID, keeping shortest path
-    seen_tiles = {}
-    for r in results:
-        tid = r["tileId"]
-        if tid not in seen_tiles or len(r["path"]) < len(seen_tiles[tid]["path"]):
-            seen_tiles[tid] = r
-
-    return list(seen_tiles.values())
+    return results
