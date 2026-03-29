@@ -30,6 +30,8 @@ class PlayerState:
         "protection": 0,
         "double_dice": 0,
         "worst_dice": 0,
+        "short_stop": 0,
+        "dizzy": 0,
     })
 
 

@@ -106,6 +106,7 @@ After any battle or minigame, the turn advances to the next player. If a player 
 | `reroll` | Gain 1 saved re-roll |
 | `double_dice_next` | Your next roll uses 2 dice (take the sum) |
 | `protection` | Block the next negative tile effect you would receive |
+| `short_stop` | Next turn, choose any tile up to your roll distance (not just exactly that distance) |
 
 ### Negative (Red)
 
@@ -118,6 +119,7 @@ After any battle or minigame, the turn advances to the next player. If a player 
 | `give_marble` | Choose an opponent to receive 1 of your marbles |
 | `give_points` | Choose an opponent to receive a random amount (10, 25, or 50) of your points |
 | `worst_dice_next` | Your next roll uses 2 dice (take the minimum) |
+| `dizzy` | Next turn, you move the full roll distance but in a random direction (no choice) |
 
 ### Neutral (Grey)
 
@@ -198,6 +200,8 @@ Modifiers are one-time consumable buffs or debuffs that sit on your character un
 | **Protection** | `protection` tile | Block the next negative tile effect you would receive |
 | **Double Dice** | `double_dice_next` tile | Your next roll uses 2d6 — move the sum |
 | **Worst Dice** | `worst_dice_next` tile | Your next roll uses 2d6 — move the minimum |
+| **Short Stop** | `short_stop` tile | Next turn, stop on any tile up to your roll distance |
+| **Dizzy** | `dizzy` tile | Next turn, move full distance in a random direction (no choice) |
 
 All modifiers are consumed when used or triggered.
 

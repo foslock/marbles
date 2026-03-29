@@ -22,6 +22,8 @@ export interface PlayerState {
     protection: number;
     double_dice: number;
     worst_dice: number;
+    short_stop: number;
+    dizzy: number;
   };
 }
 
@@ -80,6 +82,8 @@ export interface DiceResult {
   dice: number[];
   type: 'normal' | 'double' | 'worst';
   reachableTiles: { tileId: number; path: number[] }[];
+  shortStop?: boolean;
+  dizzy?: boolean;
 }
 
 export interface TileEffect {

@@ -35,7 +35,9 @@ export function PlayerHUD({ player }: Props) {
       {(player.modifiers.rerolls > 0 ||
         player.modifiers.protection > 0 ||
         player.modifiers.double_dice > 0 ||
-        player.modifiers.worst_dice > 0) && (
+        player.modifiers.worst_dice > 0 ||
+        player.modifiers.short_stop > 0 ||
+        player.modifiers.dizzy > 0) && (
         <div style={styles.modifiers}>
           {player.modifiers.rerolls > 0 && (
             <span style={styles.mod}>🔄 {player.modifiers.rerolls}</span>
@@ -48,6 +50,12 @@ export function PlayerHUD({ player }: Props) {
           )}
           {player.modifiers.worst_dice > 0 && (
             <span style={styles.modBad}>🎲↓</span>
+          )}
+          {player.modifiers.short_stop > 0 && (
+            <span style={styles.modGood}>🛑</span>
+          )}
+          {player.modifiers.dizzy > 0 && (
+            <span style={styles.modBad}>💫</span>
           )}
         </div>
       )}

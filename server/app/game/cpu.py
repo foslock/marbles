@@ -62,7 +62,26 @@ async def run_cpu_turn(sio, session, player, get_reachable_fn, check_battle_fn):
         roll = random.randint(1, 6)
         dice_info = {"roll": roll, "dice": [roll], "type": "normal"}
 
-    reachable = get_reachable_fn(session, player.current_tile, roll)
+    # Check short_stop modifier: CPU can stop on any tile 1..N steps
+    has_short_stop = player.modifiers.get("short_stop", 0) > 0
+    if has_short_stop:
+        reachable = []
+        seen_ids: set[int] = set()
+        for dist in range(1, roll + 1):
+            for tile_info in get_reachable_fn(session, player.current_tile, dist):
+                if tile_info["tileId"] not in seen_ids:
+                    seen_ids.add(tile_info["tileId"])
+                    reachable.append(tile_info)
+        player.modifiers["short_stop"] -= 1
+        dice_info["shortStop"] = True
+    else:
+        reachable = get_reachable_fn(session, player.current_tile, roll)
+
+    # Check dizzy modifier: auto-pick random tile
+    has_dizzy = player.modifiers.get("dizzy", 0) > 0
+    if has_dizzy:
+        player.modifiers["dizzy"] -= 1
+        dice_info["dizzy"] = True
 
     await sio.emit(
         "dice_rolled",
@@ -84,7 +103,10 @@ async def run_cpu_turn(sio, session, player, get_reachable_fn, check_battle_fn):
     await asyncio.sleep(random.uniform(1.5, 2.5))
 
     # ── Choose a tile ────────────────────────────────────────────────────────
-    chosen = _choose_tile(reachable, session, player)
+    if has_dizzy:
+        chosen = random.choice(reachable)
+    else:
+        chosen = _choose_tile(reachable, session, player)
     from_tile = player.current_tile
     player.current_tile = chosen["tileId"]
 

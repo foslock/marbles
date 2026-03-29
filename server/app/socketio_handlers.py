@@ -347,8 +347,26 @@ async def roll_dice(sid, data):
     if use_reroll:
         player.modifiers["rerolls"] -= 1
 
-    # Get reachable tiles for the player to choose direction
-    reachable = _get_reachable_tiles(session, player.current_tile, roll)
+    # Check short_stop modifier: player can stop on any tile 1..N steps away
+    has_short_stop = player.modifiers.get("short_stop", 0) > 0
+    if has_short_stop:
+        reachable = []
+        seen_ids: set[int] = set()
+        for dist in range(1, roll + 1):
+            for tile_info in _get_reachable_tiles(session, player.current_tile, dist):
+                if tile_info["tileId"] not in seen_ids:
+                    seen_ids.add(tile_info["tileId"])
+                    reachable.append(tile_info)
+        player.modifiers["short_stop"] -= 1
+        dice_info["shortStop"] = True
+    else:
+        reachable = _get_reachable_tiles(session, player.current_tile, roll)
+
+    # Check dizzy modifier: server auto-picks a random destination
+    has_dizzy = player.modifiers.get("dizzy", 0) > 0
+    if has_dizzy:
+        player.modifiers["dizzy"] -= 1
+        dice_info["dizzy"] = True
 
     await sio.emit("dice_rolled", {
         "playerId": player_id,
@@ -358,6 +376,62 @@ async def roll_dice(sid, data):
     }, room=session_id)
 
     await _persist_event(session_id, session.turn_number, "roll", player_id, dice_info)
+
+    # If dizzy, auto-move to a random reachable tile after a short delay
+    if has_dizzy and reachable:
+        await asyncio.sleep(1.5)  # Let dice animation play
+        chosen = random.choice(reachable)
+        from_tile = player.current_tile
+        player.current_tile = chosen["tileId"]
+
+        await sio.emit("player_moved", {
+            "playerId": player_id,
+            "playerName": player.name,
+            "tileId": chosen["tileId"],
+            "fromTile": from_tile,
+            "path": chosen["path"],
+            "dizzy": True,
+        }, room=session_id)
+
+        # Process tile effect and battles (same as choose_move)
+        battle = check_for_battle(session, player)
+        if battle:
+            await sio.emit("tile_effect", {
+                "playerId": player_id,
+                "playerName": player.name,
+                "type": "battle",
+                "category": "neutral",
+                "color": "neutral",
+                "message": battle["message"],
+            }, room=session_id)
+            await _persist_event(session_id, session.turn_number, "move", player_id, {
+                "from": from_tile, "to": chosen["tileId"], "effect": "battle",
+            })
+            session._pending_swap_tile_id = None
+            session._pending_turn_player_id = player_id
+            session._pending_turn_action = "battle"
+            session._pending_battle = battle
+            return
+
+        effect_result = process_tile_effect(session, player)
+        await sio.emit("tile_effect", {
+            "playerId": player_id,
+            "playerName": player.name,
+            **effect_result,
+        }, room=session_id)
+        await _persist_event(session_id, session.turn_number, "move", player_id, {
+            "from": from_tile, "to": chosen["tileId"], "effect": effect_result.get("type"),
+        })
+        session._pending_swap_tile_id = chosen["tileId"]
+        session._pending_turn_player_id = player_id
+        session._pending_turn_action = "swap"
+
+        if effect_result.get("requiresChoice"):
+            # For dizzy human players, still let them choose the target
+            await sio.emit("awaiting_choice", {
+                "playerId": player_id,
+                **effect_result,
+            }, to=sid)
 
 
 @sio.event

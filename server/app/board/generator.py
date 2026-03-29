@@ -41,6 +41,7 @@ TILE_EFFECTS: dict[TileCategory, tuple[TileColor, list[str]]] = {
         "steal_points",
         "double_dice_next",
         "protection",
+        "short_stop",
     ]),
     TileCategory.POSITIVE_MAJOR: (TileColor.GREEN, [
         "gain_marble",
@@ -54,6 +55,7 @@ TILE_EFFECTS: dict[TileCategory, tuple[TileColor, list[str]]] = {
         "lose_50_points",
         "give_points",
         "worst_dice_next",
+        "dizzy",
     ]),
     TileCategory.NEGATIVE_MAJOR: (TileColor.RED, [
         "lose_marble",
