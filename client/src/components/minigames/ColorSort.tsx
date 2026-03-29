@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import type { MinigameComponentProps } from './types';
+import { SFX } from '../../utils/sound';
 
 const W = 300;
 const H = 420;
@@ -100,9 +101,12 @@ export function ColorSort({ onScoreUpdate, config }: MinigameComponentProps) {
 
       const correct = bucketIdx === sequence.current[marbleIdxRef.current % SEQUENCE_LEN];
       if (correct) {
+        SFX.minigameCorrectSort();
         scoreRef.current += 10;
         setScore(scoreRef.current);
         onScoreUpdate(scoreRef.current);
+      } else {
+        SFX.error();
       }
 
       setMarbleVisible(false);

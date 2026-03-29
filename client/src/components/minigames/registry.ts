@@ -19,6 +19,7 @@ import { SizeMatch } from './SizeMatch';
 import { TiltChase } from './TiltChase';
 import { TowerBuilder } from './TowerBuilder';
 import { ColorSort } from './ColorSort';
+import { MarbleRunner } from './MarbleRunner';
 
 /**
  * Register minigames here. The key must match the `type` field
@@ -37,4 +38,5 @@ export const MINIGAME_REGISTRY: Record<string, ComponentType<MinigameComponentPr
   accelerometer: TiltChase,
   tower_builder: TowerBuilder,
   color_sort: ColorSort,
+  marble_runner: MarbleRunner,
 };

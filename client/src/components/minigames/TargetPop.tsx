@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { MinigameComponentProps } from './types';
+import { SFX } from '../../utils/sound';
 
 interface Target {
   id: number;
@@ -49,6 +50,7 @@ export function TargetPop({ onScoreUpdate }: MinigameComponentProps) {
   }, []);
 
   const handlePop = useCallback((targetId: number) => {
+    SFX.minigamePop();
     setTargets((prev) => prev.filter((t) => t.id !== targetId));
     scoreRef.current += 1;
     onScoreUpdate(scoreRef.current);

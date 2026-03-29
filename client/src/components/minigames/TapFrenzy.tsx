@@ -1,10 +1,12 @@
 import { useCallback, useState } from 'react';
 import type { MinigameComponentProps } from './types';
+import { SFX } from '../../utils/sound';
 
 export function TapFrenzy({ onScoreUpdate }: MinigameComponentProps) {
   const [score, setScore] = useState(0);
 
   const handleTap = useCallback(() => {
+    SFX.minigameTap();
     setScore((s) => {
       const next = s + 1;
       onScoreUpdate(next);

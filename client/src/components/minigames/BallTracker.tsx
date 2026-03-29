@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import type { MinigameComponentProps } from './types';
+import { SFX } from '../../utils/sound';
 
 export function BallTracker({ onScoreUpdate }: MinigameComponentProps) {
   const [ballPos, setBallPos] = useState({ x: 150, y: 200 });
@@ -24,6 +25,7 @@ export function BallTracker({ onScoreUpdate }: MinigameComponentProps) {
       if (dist < 40) {
         scoreRef.current += 1;
         onScoreUpdate(scoreRef.current);
+        SFX.minigameOnTarget();
       }
     }
   }, [fingerDown, fingerPos, ballPos, onScoreUpdate]);

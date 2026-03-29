@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { MinigameComponentProps } from './types';
+import { SFX } from '../../utils/sound';
 
 /**
  * Tower Builder
@@ -209,6 +210,7 @@ export function TowerBuilder({ onScoreUpdate, config }: MinigameComponentProps) 
 
     if (n === 0) {
       // First block — always succeeds, forms the base
+      SFX.minigameLand(3);
       const pts = Math.round(w * BLOCK_H);
       scoreRef.current += pts;
       setScore(scoreRef.current);
@@ -241,6 +243,7 @@ export function TowerBuilder({ onScoreUpdate, config }: MinigameComponentProps) 
 
     if (overlapW <= 0) {
       // Complete miss — animate off-screen then end game
+      SFX.minigameFall();
       dropAnimRef.current = {
         x, width: w, color, startY,
         endY: SCREEN_H + 80,
@@ -255,7 +258,10 @@ export function TowerBuilder({ onScoreUpdate, config }: MinigameComponentProps) 
       return;
     }
 
-    // Successful drop — trim to overlap
+    // Successful drop — trim to overlap; quality based on fraction retained
+    const overlapFrac = overlapW / w;
+    const quality: 0 | 1 | 2 | 3 = overlapFrac >= 0.95 ? 3 : overlapFrac >= 0.75 ? 2 : overlapFrac >= 0.45 ? 1 : 0;
+    SFX.minigameLand(quality);
     const pts    = Math.round(overlapW * BLOCK_H);
     scoreRef.current += pts;
     setScore(scoreRef.current);

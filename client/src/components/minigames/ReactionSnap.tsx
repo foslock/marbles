@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import type { MinigameComponentProps } from './types';
+import { SFX } from '../../utils/sound';
 
 export function ReactionSnap({ onScoreUpdate, config }: MinigameComponentProps) {
   const [state, setState] = useState<'waiting' | 'ready' | 'tapped'>('waiting');
@@ -15,6 +16,7 @@ export function ReactionSnap({ onScoreUpdate, config }: MinigameComponentProps) 
     const delay = delays.current[roundIdx] ?? (800 + Math.random() * 1700);
     const timer = setTimeout(() => {
       readyTime.current = Date.now();
+      SFX.minigameReactionGo();
       setState('ready');
     }, delay);
     return () => clearTimeout(timer);
@@ -26,6 +28,7 @@ export function ReactionSnap({ onScoreUpdate, config }: MinigameComponentProps) 
       const reactionMs = Date.now() - readyTime.current;
       // Score: faster = higher. 1000 - reactionMs, clamped to 0-1000
       const roundScore = Math.max(0, Math.round(1000 - reactionMs));
+      SFX.minigameReactionTap(reactionMs);
       totalScore.current += roundScore;
       roundCount.current += 1;
       onScoreUpdate(totalScore.current);
