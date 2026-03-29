@@ -63,24 +63,25 @@ export function GameScreen({
   const [showScoreboard, setShowScoreboard] = useState(false);
 
   // ── Dice-settle gating ───────────────────────────────────────────────────
-  // Buffer the move animation until the dice overlay reports it has visually
-  // settled (landed + held for 1 s).  This prevents tokens from moving while
-  // the die is still bouncing.
-  const diceSettledRef = useRef(true);
+  // Buffer the move animation and tile selection until the dice overlay
+  // reports it has visually settled (landed + held for 1 s).
+  const [diceSettled, setDiceSettled] = useState(true);
   const [activeMoveAnimation, setActiveMoveAnimation] = useState<MoveAnimation | null>(null);
   const movePendingRef = useRef<MoveAnimation | null>(null);
 
   // When a new dice roll comes in, mark as unsettled
   useEffect(() => {
     if (diceResult) {
-      diceSettledRef.current = false;
+      setDiceSettled(false);
     } else {
-      // No roll in progress — allow moves through immediately
-      diceSettledRef.current = true;
+      setDiceSettled(true);
     }
   }, [diceResult]);
 
   // When moveAnimation arrives, either pass through or buffer
+  const diceSettledRef = useRef(true);
+  diceSettledRef.current = diceSettled;
+
   useEffect(() => {
     if (!moveAnimation) {
       if (!movePendingRef.current) setActiveMoveAnimation(null);
@@ -94,7 +95,7 @@ export function GameScreen({
   }, [moveAnimation]);
 
   const onDiceSettled = useCallback(() => {
-    diceSettledRef.current = true;
+    setDiceSettled(true);
     if (movePendingRef.current) {
       setActiveMoveAnimation(movePendingRef.current);
       movePendingRef.current = null;
@@ -201,7 +202,7 @@ export function GameScreen({
     : null;
 
   const needsToChooseMove =
-    diceResult && diceResult.playerId === playerId && diceResult.reachableTiles.length > 0;
+    diceSettled && diceResult && diceResult.playerId === playerId && diceResult.reachableTiles.length > 0;
 
   const handleChooseMove = (tileId: number) => {
     const tile = diceResult?.reachableTiles.find((t) => t.tileId === tileId);

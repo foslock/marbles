@@ -25,8 +25,9 @@ const BOUNCE = 0.55;
 const GRAVITY = 0;
 const DIE_SIZE = 72;
 const SETTLE_THRESHOLD = 0.4;
-const LAND_HOLD_MS = 1000;   // minimum time the die stays visible after landing
-const FADE_DURATION = 500;   // ms for the fade-out after hold
+const LAND_HOLD_MS = 1000;   // time the result stays visible after landing
+const FADE_DURATION = 500;   // ms for fade-out after hold
+const FADE_IN_MS = 300;      // quick fade-in for non-active players
 
 // Dot positions for each face (relative to die size)
 const FACE_DOTS: Record<number, [number, number][]> = {
@@ -58,12 +59,11 @@ export function DiceOverlay({
     faceTimer: 0,
   });
 
-  // Drag gesture tracking — stores recent positions for velocity calculation
+  // Drag gesture tracking
   const gestureRef = useRef<{
     pointerId: number;
-    // Ring buffer of recent positions (last ~5 frames) for velocity
     trail: { x: number; y: number; t: number }[];
-    offsetX: number; // offset from die center at grab time
+    offsetX: number;
     offsetY: number;
   } | null>(null);
 
@@ -71,6 +71,7 @@ export function DiceOverlay({
   const targetFaceRef = useRef<number | null>(null);
   const settleCounterRef = useRef(0);
   const landedAtRef = useRef(0);
+  const rollingStartedAtRef = useRef(0);   // for fade-in timing
   const settledFiredRef = useRef(false);
   const isMyTurnRef = useRef(isMyTurn);
   isMyTurnRef.current = isMyTurn;
@@ -79,7 +80,10 @@ export function DiceOverlay({
   const onDiceSettledRef = useRef(onDiceSettled);
   onDiceSettledRef.current = onDiceSettled;
 
-  // Center the die when container size is known
+  /** Whether this viewer is the active player (not spectator). */
+  const isActivePlayer = () => isMyTurnRef.current && !isSpectatorRef.current;
+
+  // Center the die
   const centerDie = useCallback(() => {
     const c = containerRef.current;
     if (!c) return;
@@ -87,7 +91,7 @@ export function DiceOverlay({
     dieRef.current.y = c.clientHeight / 2 - DIE_SIZE / 2;
   }, []);
 
-  // Reset to idle state
+  // Reset to idle
   const resetDie = useCallback(() => {
     centerDie();
     const d = dieRef.current;
@@ -96,23 +100,21 @@ export function DiceOverlay({
     settleCounterRef.current = 0;
     targetFaceRef.current = null;
     landedAtRef.current = 0;
+    rollingStartedAtRef.current = 0;
     settledFiredRef.current = false;
     phaseRef.current = 'idle';
     setPhase('idle');
   }, [centerDie]);
 
-  // Initialize
-  useEffect(() => {
-    centerDie();
-  }, [centerDie]);
+  useEffect(() => { centerDie(); }, [centerDie]);
 
   // When rolledValue arrives from server, set target face
   useEffect(() => {
     if (rolledValue != null && rolledValue >= 1) {
       targetFaceRef.current = rolledValue;
 
-      // Auto-roll for non-active player: kick the die into motion
-      if (!isMyTurnRef.current && phaseRef.current === 'idle') {
+      // Auto-roll for non-active player / spectator: kick the die into motion
+      if (!isActivePlayer() && phaseRef.current === 'idle') {
         const d = dieRef.current;
         centerDie();
         const angle = Math.random() * Math.PI * 2;
@@ -120,6 +122,7 @@ export function DiceOverlay({
         d.vx = Math.cos(angle) * speed;
         d.vy = Math.sin(angle) * speed;
         d.angularV = (Math.random() - 0.5) * 0.4;
+        rollingStartedAtRef.current = performance.now();
         phaseRef.current = 'rolling';
         setPhase('rolling');
         SFX.diceRoll();
@@ -131,7 +134,7 @@ export function DiceOverlay({
         resetDie();
       }
     }
-  }, [rolledValue, centerDie, resetDie]);
+  }, [rolledValue, centerDie, resetDie]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Physics loop ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -155,8 +158,9 @@ export function DiceOverlay({
 
       const d = dieRef.current;
       const now = performance.now();
+      const active = isActivePlayer();
 
-      // ── Physics step (only when rolling freely, not dragging) ────────────
+      // ── Physics step ─────────────────────────────────────────────────────
       if (phaseRef.current === 'rolling') {
         d.vy += GRAVITY;
         d.x += d.vx;
@@ -172,7 +176,7 @@ export function DiceOverlay({
         if (d.y < 0) { d.y = 0; d.vy = -d.vy * BOUNCE; d.angularV += (Math.random() - 0.5) * 0.1; }
         if (d.y + DIE_SIZE > h) { d.y = h - DIE_SIZE; d.vy = -d.vy * BOUNCE; d.angularV += (Math.random() - 0.5) * 0.1; }
 
-        // Cycle face randomly while moving
+        // Cycle face randomly
         d.faceTimer++;
         if (d.faceTimer % 4 === 0) {
           d.face = Math.floor(Math.random() * 6) + 1;
@@ -191,7 +195,6 @@ export function DiceOverlay({
             SFX.diceResult();
             Haptics.medium();
           } else {
-            // Waiting for server — keep rolling gently
             settleCounterRef.current++;
             if (settleCounterRef.current > 60) {
               d.vx += (Math.random() - 0.5) * 2;
@@ -205,16 +208,16 @@ export function DiceOverlay({
         }
       }
 
-      // While dragging, cycle the face for visual feedback
+      // While dragging, cycle face for visual feedback
       if (phaseRef.current === 'dragging') {
         d.faceTimer++;
         if (d.faceTimer % 6 === 0) {
           d.face = Math.floor(Math.random() * 6) + 1;
         }
-        d.angle += 0.03; // slow spin while held
+        d.angle += 0.03;
       }
 
-      // ── Fire settled callback after hold period ──────────────────────────
+      // ── Fire settled callback after hold ─────────────────────────────────
       if (phaseRef.current === 'landed' && landedAtRef.current > 0 && !settledFiredRef.current) {
         if (now - landedAtRef.current >= LAND_HOLD_MS) {
           settledFiredRef.current = true;
@@ -223,16 +226,40 @@ export function DiceOverlay({
       }
 
       // ── Compute opacity ──────────────────────────────────────────────────
-      let opacity = 1;
-      if (phaseRef.current === 'landed' && landedAtRef.current > 0) {
-        const elapsed = now - landedAtRef.current;
-        if (elapsed > LAND_HOLD_MS) {
-          opacity = Math.max(0, 1 - (elapsed - LAND_HOLD_MS) / FADE_DURATION);
+      // Active player: fully visible during idle/dragging/rolling/landed,
+      //   fades out after landed hold.
+      // Non-active / spectator: invisible when idle, fades IN when rolling
+      //   starts, fully visible while rolling + landed, fades out after
+      //   landed hold.
+      let opacity = 0;
+
+      if (active) {
+        // Active player — always visible until post-landing fade
+        opacity = 1;
+        if (phaseRef.current === 'landed' && landedAtRef.current > 0) {
+          const elapsed = now - landedAtRef.current;
+          if (elapsed > LAND_HOLD_MS) {
+            opacity = Math.max(0, 1 - (elapsed - LAND_HOLD_MS) / FADE_DURATION);
+          }
         }
-      }
-      // Semi-transparent when idle and not my turn
-      if (phaseRef.current === 'idle' && !isMyTurnRef.current) {
-        opacity = 0.35;
+      } else {
+        // Non-active / spectator
+        if (phaseRef.current === 'idle') {
+          opacity = 0; // completely hidden
+        } else if (phaseRef.current === 'rolling') {
+          // Fade in quickly from 0→1
+          const elapsed = rollingStartedAtRef.current > 0
+            ? now - rollingStartedAtRef.current : FADE_IN_MS;
+          opacity = Math.min(1, elapsed / FADE_IN_MS);
+        } else if (phaseRef.current === 'landed') {
+          opacity = 1;
+          if (landedAtRef.current > 0) {
+            const elapsed = now - landedAtRef.current;
+            if (elapsed > LAND_HOLD_MS) {
+              opacity = Math.max(0, 1 - (elapsed - LAND_HOLD_MS) / FADE_DURATION);
+            }
+          }
+        }
       }
 
       if (opacity <= 0) {
@@ -241,7 +268,7 @@ export function DiceOverlay({
       }
 
       // ── Pulsing glow for idle active player ──────────────────────────────
-      const showPrompt = phaseRef.current === 'idle' && isMyTurnRef.current && !isSpectatorRef.current;
+      const showPrompt = phaseRef.current === 'idle' && active;
       let glowRadius = 0;
       if (showPrompt) {
         glowRadius = 8 + 10 * Math.abs(Math.sin(now / 750 * Math.PI));
@@ -304,9 +331,7 @@ export function DiceOverlay({
       // Dots
       const dots = FACE_DOTS[d.face] || FACE_DOTS[1];
       const dotR = DIE_SIZE * 0.09;
-      const dotColor = phaseRef.current === 'idle' && isMyTurnRef.current ? '#1a1a2e'
-        : phaseRef.current === 'idle' ? '#555'
-        : '#fff';
+      const dotColor = phaseRef.current === 'idle' ? '#1a1a2e' : '#fff';
 
       for (const [px, py] of dots) {
         ctx.beginPath();
@@ -326,7 +351,7 @@ export function DiceOverlay({
 
       ctx.restore();
 
-      // ── Hint text ────────────────────────────────────────────────────────
+      // ── Hint text (only for active player in idle) ───────────────────────
       if (showPrompt) {
         const hintAlpha = 0.6 + 0.4 * Math.abs(Math.sin(now / 750 * Math.PI));
         ctx.font = 'bold 15px sans-serif';
@@ -350,7 +375,7 @@ export function DiceOverlay({
   }, []);
 
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
-    if (!isMyTurn || phaseRef.current !== 'idle') return;
+    if (!isMyTurn || isSpectator || phaseRef.current !== 'idle') return;
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     const pos = getCanvasPos(e.clientX, e.clientY);
     const d = dieRef.current;
@@ -362,7 +387,7 @@ export function DiceOverlay({
     };
     phaseRef.current = 'dragging';
     setPhase('dragging');
-  }, [isMyTurn, getCanvasPos]);
+  }, [isMyTurn, isSpectator, getCanvasPos]);
 
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
     const g = gestureRef.current;
@@ -370,11 +395,9 @@ export function DiceOverlay({
     const pos = getCanvasPos(e.clientX, e.clientY);
     const now = performance.now();
 
-    // Move die to follow finger (offset so it doesn't jump)
     dieRef.current.x = pos.x - g.offsetX - DIE_SIZE / 2;
     dieRef.current.y = pos.y - g.offsetY - DIE_SIZE / 2;
 
-    // Keep a short trail for velocity calculation (last 5 points)
     g.trail.push({ x: pos.x, y: pos.y, t: now });
     if (g.trail.length > 5) g.trail.shift();
   }, [getCanvasPos]);
@@ -390,26 +413,23 @@ export function DiceOverlay({
       return;
     }
 
-    // Calculate flick velocity from recent trail
     const pos = getCanvasPos(e.clientX, e.clientY);
     const now = performance.now();
     g.trail.push({ x: pos.x, y: pos.y, t: now });
 
     const oldest = g.trail[0];
-    const dt = Math.max(1, (now - oldest.t)) / 1000; // seconds
+    const dt = Math.max(1, (now - oldest.t)) / 1000;
     const dx = pos.x - oldest.x;
     const dy = pos.y - oldest.y;
     const flickSpeed = Math.hypot(dx, dy) / dt;
 
     const d = dieRef.current;
     if (flickSpeed > 100) {
-      // Real flick — use direction and speed
       const norm = Math.hypot(dx, dy) || 1;
       const s = Math.min(20, flickSpeed / 60);
       d.vx = (dx / norm) * s;
       d.vy = (dy / norm) * s;
     } else {
-      // Weak flick / tap — give random push
       const angle = Math.random() * Math.PI * 2;
       const s = 10 + Math.random() * 5;
       d.vx = Math.cos(angle) * s;
@@ -417,6 +437,7 @@ export function DiceOverlay({
     }
 
     d.angularV = (Math.random() - 0.5) * 0.5;
+    rollingStartedAtRef.current = now;
     phaseRef.current = 'rolling';
     setPhase('rolling');
     SFX.diceRoll();
@@ -424,8 +445,8 @@ export function DiceOverlay({
     onRoll(false);
   }, [isMyTurn, onRoll, getCanvasPos]);
 
-  // Only capture pointer events when interactive (idle or dragging + my turn)
-  const interactive = isMyTurn && (phase === 'idle' || phase === 'dragging');
+  // Only capture pointer events when interactive (active player in idle/dragging)
+  const interactive = isMyTurn && !isSpectator && (phase === 'idle' || phase === 'dragging');
 
   return (
     <div ref={containerRef} style={{ ...styles.container, pointerEvents: interactive ? 'auto' : 'none' }}>
@@ -437,13 +458,15 @@ export function DiceOverlay({
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
       />
-      {/* Modifier badges */}
-      <div style={styles.modifiers}>
-        {hasDoubleDice && <span style={styles.modBadge}>🎲🎲 Double!</span>}
-        {hasWorstDice && <span style={styles.modBadgeRed}>🎲↓ Worst!</span>}
-      </div>
-      {/* Re-roll button */}
-      {isMyTurn && hasRerolls && phase === 'idle' && (
+      {/* Modifier badges — only while rolling/landed so non-active players see them */}
+      {(phase === 'rolling' || phase === 'landed' || (isMyTurn && !isSpectator)) && (
+        <div style={styles.modifiers}>
+          {hasDoubleDice && <span style={styles.modBadge}>🎲🎲 Double!</span>}
+          {hasWorstDice && <span style={styles.modBadgeRed}>🎲↓ Worst!</span>}
+        </div>
+      )}
+      {/* Re-roll button — only for active player */}
+      {isMyTurn && !isSpectator && hasRerolls && phase === 'idle' && (
         <button
           style={{ ...styles.rerollBtn, pointerEvents: 'auto' }}
           onClick={() => {
@@ -453,6 +476,7 @@ export function DiceOverlay({
             d.vx = Math.cos(angle) * s;
             d.vy = Math.sin(angle) * s;
             d.angularV = (Math.random() - 0.5) * 0.5;
+            rollingStartedAtRef.current = performance.now();
             phaseRef.current = 'rolling';
             setPhase('rolling');
             SFX.diceRoll();
