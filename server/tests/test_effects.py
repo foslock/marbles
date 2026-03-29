@@ -1,7 +1,7 @@
 """Tests for tile effect processing."""
 
 import pytest
-from app.game.effects import process_tile_effect, apply_choice_effect, POINTS_PER_MARBLE
+from app.game.effects import process_tile_effect, apply_choice_effect, swap_tile_effect, POINTS_PER_MARBLE
 from app.board.generator import TileCategory, TileColor
 
 
@@ -125,19 +125,29 @@ class TestProcessTileEffect:
         result = process_tile_effect(session, player)
         assert result["type"] == "none"
 
-    def test_tile_effect_swap_occurs(self, session, player):
-        """After landing on a tile, its effect should be swapped with another."""
+    def test_tile_effect_reveals_tile(self, session, player):
+        """process_tile_effect should reveal the tile (swap is deferred)."""
         tile = session.board.tiles[player.current_tile]
         tile.effect = "gain_10_points"
         tile.category = TileCategory.POSITIVE_MINOR
         tile.color = TileColor.GREEN
         tile.is_revealed = False
-        original_effect = tile.effect
 
         process_tile_effect(session, player)
-        # The tile's effect may have been swapped (depending on available tiles)
-        # At minimum, is_revealed should be reset to False after swap
-        assert tile.is_revealed is False  # Reset after swap
+        # Tile is now revealed; swap happens later via swap_tile_effect
+        assert tile.is_revealed is True
+
+    def test_deferred_swap_resets_revealed(self, session, player):
+        """swap_tile_effect should swap the tile and reset is_revealed."""
+        tile = session.board.tiles[player.current_tile]
+        tile.effect = "gain_10_points"
+        tile.category = TileCategory.POSITIVE_MINOR
+        tile.color = TileColor.GREEN
+        tile.is_revealed = True
+
+        swap_tile_effect(session, player.current_tile)
+        # After swap, is_revealed should be reset to False
+        assert tile.is_revealed is False
 
 
 class TestApplyChoiceEffect:
