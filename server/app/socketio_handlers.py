@@ -1,6 +1,7 @@
 """Socket.IO event handlers for Losing Their Marbles."""
 
 import random
+import logging
 import socketio
 
 from .game.state import session_manager
@@ -13,20 +14,55 @@ from .game.minigames.base import (
     apply_minigame_prizes,
 )
 
+logger = logging.getLogger("ltm")
+
 sio = socketio.AsyncServer(
     async_mode="asgi",
     cors_allowed_origins=[],  # Allow all for dev; restrict in production
 )
 
 
+async def _persist_session(session):
+    """Best-effort persist session to DB. Non-blocking — failures are logged, not raised."""
+    try:
+        from .database import async_session
+        from .game.persistence import save_session
+        async with async_session() as db:
+            await save_session(db, session)
+    except Exception as e:
+        logger.warning(f"Failed to persist session {session.id}: {e}")
+
+
+async def _persist_board(session):
+    """Best-effort persist board to DB."""
+    try:
+        from .database import async_session
+        from .game.persistence import save_board
+        async with async_session() as db:
+            await save_board(db, session)
+    except Exception as e:
+        logger.warning(f"Failed to persist board {session.id}: {e}")
+
+
+async def _persist_event(session_id, turn_number, event_type, player_id, data):
+    """Best-effort log a game event to DB."""
+    try:
+        from .database import async_session
+        from .game.persistence import log_event
+        async with async_session() as db:
+            await log_event(db, session_id, turn_number, event_type, player_id, data)
+    except Exception as e:
+        logger.warning(f"Failed to log event: {e}")
+
+
 @sio.event
 async def connect(sid, environ):
-    print(f"[connect] {sid}")
+    logger.info(f"[connect] {sid}")
 
 
 @sio.event
 async def disconnect(sid):
-    print(f"[disconnect] {sid}")
+    logger.info(f"[disconnect] {sid}")
     result = session_manager.remove_player_by_sid(sid)
     if result:
         session_id, player = result
@@ -38,6 +74,7 @@ async def disconnect(sid):
                 room=session_id,
             )
             await sio.emit("lobby_update", session.to_lobby_dict(), room=session_id)
+            await _persist_session(session)
 
 
 @sio.event
@@ -65,6 +102,8 @@ async def create_session(sid, data):
         "playerId": player.id,
         "lobby": session.to_lobby_dict(),
     }, to=sid)
+
+    await _persist_session(session)
 
 
 @sio.event
@@ -110,6 +149,8 @@ async def join_session(sid, data):
     if role == "spectator" and session.state == "playing":
         await sio.emit("game_state", session.to_game_dict(), to=sid)
 
+    await _persist_session(session)
+
 
 @sio.event
 async def reconnect_session(sid, data):
@@ -154,6 +195,8 @@ async def reconnect_session(sid, data):
         "name": player.name,
     }, room=session.id, skip_sid=sid)
 
+    await _persist_session(session)
+
 
 @sio.event
 async def start_game(sid, data):
@@ -175,6 +218,14 @@ async def start_game(sid, data):
         return
 
     await sio.emit("game_started", session.to_game_dict(), room=session_id_actual)
+
+    # Persist game start
+    await _persist_session(session)
+    await _persist_board(session)
+    await _persist_event(session.id, 0, "game_started", None, {
+        "playerCount": len(session.get_players()),
+        "targetMarbles": session.target_marbles,
+    })
 
 
 @sio.event
@@ -230,6 +281,8 @@ async def roll_dice(sid, data):
         "reachableTiles": reachable,
     }, room=session_id)
 
+    await _persist_event(session_id, session.turn_number, "roll", player_id, dice_info)
+
 
 @sio.event
 async def choose_move(sid, data):
@@ -244,13 +297,17 @@ async def choose_move(sid, data):
         return
 
     target_tile = data.get("tileId")
+    path = data.get("path", [])
     player = session.players[player_id]
+    from_tile = player.current_tile
     player.current_tile = target_tile
 
     await sio.emit("player_moved", {
         "playerId": player_id,
         "playerName": player.name,
         "tileId": target_tile,
+        "fromTile": from_tile,
+        "path": path,
     }, room=session_id)
 
     # Process tile effect
@@ -260,6 +317,10 @@ async def choose_move(sid, data):
         "playerName": player.name,
         **effect_result,
     }, room=session_id)
+
+    await _persist_event(session_id, session.turn_number, "move", player_id, {
+        "from": from_tile, "to": target_tile, "effect": effect_result.get("type"),
+    })
 
     # If effect requires a choice, wait for it
     if effect_result.get("requiresChoice"):
@@ -335,6 +396,12 @@ async def submit_minigame_score(sid, data):
             "marbleBonus": result.marble_bonus,
         }, room=session_id)
 
+        await _persist_event(session_id, session.turn_number, "minigame", None, {
+            "minigameId": minigame_id,
+            "rankings": result.rankings,
+            "marbleBonus": result.marble_bonus,
+        })
+
         # Clean up
         session._minigame_scores = {}
         session._minigame_participants = []
@@ -367,6 +434,8 @@ async def _check_battle_and_end_turn(session, player):
             )
             await sio.emit("battle_result", result, room=session.id)
 
+            await _persist_event(session.id, session.turn_number, "battle", player.id, result)
+
     # Check for winner
     winner = session.check_winner()
     if winner:
@@ -375,11 +444,17 @@ async def _check_battle_and_end_turn(session, player):
             "winnerName": winner.name,
             "players": session.to_game_dict()["players"],
         }, room=session.id)
+
+        await _persist_event(session.id, session.turn_number, "game_over", winner.id, {})
+        await _persist_session(session)
         return
 
     # Advance turn
     _end_turn(session)
     await _send_turn_update(session)
+
+    # Persist at end of every turn
+    await _persist_session(session)
 
 
 def _end_turn(session):

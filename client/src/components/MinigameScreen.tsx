@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import type { MinigameInfo } from '../types/game';
 import { MINIGAME_REGISTRY } from './minigames';
 import { TapFrenzy } from './minigames/TapFrenzy';
+import { SFX } from '../utils/sound';
+import { Haptics } from '../utils/haptics';
 
 interface Props {
   minigameInfo: MinigameInfo;
@@ -28,9 +30,13 @@ export function MinigameScreen({ minigameInfo, playerId, onSubmitScore }: Props)
   useEffect(() => {
     if (phase !== 'countdown') return;
     if (countdown <= 0) {
+      SFX.countdownGo();
+      Haptics.heavy();
       setPhase('playing');
       return;
     }
+    SFX.countdownTick();
+    Haptics.light();
     const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
     return () => clearTimeout(timer);
   }, [phase, countdown]);
@@ -50,6 +56,8 @@ export function MinigameScreen({ minigameInfo, playerId, onSubmitScore }: Props)
   useEffect(() => {
     if (phase === 'done' && !submitted.current) {
       submitted.current = true;
+      SFX.minigameComplete();
+      Haptics.medium();
       onSubmitScore(minigame.id, scoreRef.current);
     }
   }, [phase, minigame.id, onSubmitScore]);

@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import type { BattleResult } from '../types/game';
 
 interface Props {
@@ -7,6 +7,14 @@ interface Props {
 }
 
 export function BattleOverlay({ result, onClose }: Props) {
+  const [showResult, setShowResult] = useState(false);
+
+  useEffect(() => {
+    // Delay showing the result for dramatic effect
+    const timer = setTimeout(() => setShowResult(true), 800);
+    return () => clearTimeout(timer);
+  }, []);
+
   useEffect(() => {
     const timer = setTimeout(onClose, 4000);
     return () => clearTimeout(timer);
@@ -14,21 +22,25 @@ export function BattleOverlay({ result, onClose }: Props) {
 
   return (
     <div style={styles.overlay} onClick={onClose}>
-      <div style={styles.card}>
-        <h3 style={styles.title}>BATTLE!</h3>
+      <div className="animate-bounce-in" style={styles.card}>
+        <h3 className="animate-shake" style={styles.title}>BATTLE!</h3>
         <div style={styles.versus}>
           <div style={styles.fighter}>
-            <span style={styles.dieResult}>{result.playerRoll}</span>
+            <span className="animate-bounce-in" style={styles.dieResult}>{result.playerRoll}</span>
           </div>
-          <span style={styles.vs}>VS</span>
+          <span className="animate-pulse" style={styles.vs}>VS</span>
           <div style={styles.fighter}>
-            <span style={styles.dieResult}>{result.opponentRoll}</span>
+            <span className="animate-bounce-in" style={styles.dieResult}>{result.opponentRoll}</span>
           </div>
         </div>
-        <p style={styles.winner}>{result.winnerName} wins!</p>
-        <p style={styles.prize}>
-          Stole {result.actualPrize} points (prize die: {result.prizeRoll})
-        </p>
+        {showResult && (
+          <div className="animate-slide-up">
+            <p style={styles.winner}>{result.winnerName} wins!</p>
+            <p style={styles.prize}>
+              Stole {result.actualPrize} points (prize die: {result.prizeRoll})
+            </p>
+          </div>
+        )}
         <span style={styles.tap}>Tap to dismiss</span>
       </div>
     </div>
@@ -57,6 +69,7 @@ const styles: Record<string, React.CSSProperties> = {
     width: '100%',
     textAlign: 'center',
     border: '3px solid #e74c3c',
+    boxShadow: '0 0 40px rgba(231, 76, 60, 0.4), 0 0 80px rgba(231, 76, 60, 0.2)',
   },
   title: {
     color: '#e74c3c',

@@ -6,7 +6,7 @@ import type {
   BattleResult,
   MinigameResults,
 } from '../types/game';
-import { GameBoard } from './GameBoard';
+import { GameBoard, type MoveAnimation } from './GameBoard';
 import { DiceRoller } from './DiceRoller';
 import { TileEffectOverlay } from './TileEffectOverlay';
 import { BattleOverlay } from './BattleOverlay';
@@ -22,12 +22,14 @@ interface Props {
   battleResult: BattleResult | null;
   minigameResults: MinigameResults | null;
   awaitingChoice: TileEffect | null;
+  moveAnimation: MoveAnimation | null;
   onRollDice: (useReroll?: boolean) => void;
-  onChooseMove: (tileId: number) => void;
+  onChooseMove: (tileId: number, path?: number[]) => void;
   onMakeChoice: (choiceType: string, targetId: string, amount?: number) => void;
   onClearTileEffect: () => void;
   onClearBattleResult: () => void;
   onClearMinigameResults: () => void;
+  onClearMoveAnimation: () => void;
 }
 
 export function GameScreen({
@@ -38,12 +40,14 @@ export function GameScreen({
   battleResult,
   minigameResults,
   awaitingChoice,
+  moveAnimation,
   onRollDice,
   onChooseMove,
   onMakeChoice,
   onClearTileEffect,
   onClearBattleResult,
   onClearMinigameResults,
+  onClearMoveAnimation,
 }: Props) {
   const [showScoreboard, setShowScoreboard] = useState(false);
   const isMyTurn = gameState.currentTurnPlayerId === playerId;
@@ -54,6 +58,11 @@ export function GameScreen({
     : null;
 
   const needsToChooseMove = diceResult && diceResult.playerId === playerId && diceResult.reachableTiles.length > 0;
+
+  const handleChooseMove = (tileId: number) => {
+    const tile = diceResult?.reachableTiles.find((t) => t.tileId === tileId);
+    onChooseMove(tileId, tile?.path);
+  };
 
   const sortedPlayers = useMemo(() => {
     return Object.values(gameState.players)
@@ -94,7 +103,9 @@ export function GameScreen({
             board={gameState.board}
             players={sortedPlayers}
             reachableTiles={needsToChooseMove ? diceResult.reachableTiles : []}
-            onTileClick={needsToChooseMove ? onChooseMove : undefined}
+            onTileClick={needsToChooseMove ? handleChooseMove : undefined}
+            moveAnimation={moveAnimation}
+            onAnimationComplete={onClearMoveAnimation}
           />
         )}
       </div>

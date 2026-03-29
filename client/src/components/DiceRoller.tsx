@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { SFX } from '../utils/sound';
+import { Haptics } from '../utils/haptics';
 
 interface Props {
   onRoll: (useReroll?: boolean) => void;
@@ -13,6 +15,8 @@ export function DiceRoller({ onRoll, hasRerolls, hasDoubleDice, hasWorstDice }: 
 
   const handleRoll = (useReroll = false) => {
     setRolling(true);
+    SFX.diceRoll();
+    Haptics.diceRoll();
     // Quick animation
     let count = 0;
     const interval = setInterval(() => {
@@ -21,6 +25,8 @@ export function DiceRoller({ onRoll, hasRerolls, hasDoubleDice, hasWorstDice }: 
       if (count > 8) {
         clearInterval(interval);
         setRolling(false);
+        SFX.diceResult();
+        Haptics.medium();
         onRoll(useReroll);
       }
     }, 80);

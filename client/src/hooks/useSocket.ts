@@ -10,11 +10,14 @@ import type {
   MinigameInfo,
   MinigameResults,
 } from '../types/game';
+import { SFX } from '../utils/sound';
+import { Haptics } from '../utils/haptics';
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || '';
 
 export function useSocket() {
   const socketRef = useRef<Socket | null>(null);
+  const playerIdRef = useRef<string | null>(null);
   const [connected, setConnected] = useState(false);
   const [phase, setPhase] = useState<GamePhase>('home');
   const [playerId, setPlayerId] = useState<string | null>(null);
@@ -28,6 +31,7 @@ export function useSocket() {
   const [minigameResults, setMinigameResults] = useState<MinigameResults | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [awaitingChoice, setAwaitingChoice] = useState<TileEffect | null>(null);
+  const [moveAnimation, setMoveAnimation] = useState<{ playerId: string; path: number[] } | null>(null);
 
   useEffect(() => {
     const socket = io(SOCKET_URL, {
@@ -53,6 +57,7 @@ export function useSocket() {
 
     socket.on('session_created', (data) => {
       setPlayerId(data.playerId);
+      playerIdRef.current = data.playerId;
       setSessionId(data.sessionId);
       setLobby(data.lobby);
       setPhase('lobby');
@@ -65,6 +70,7 @@ export function useSocket() {
 
     socket.on('joined_session', (data) => {
       setPlayerId(data.playerId);
+      playerIdRef.current = data.playerId;
       setSessionId(data.sessionId);
       setLobby(data.lobby);
       setPhase('lobby');
@@ -93,6 +99,10 @@ export function useSocket() {
     });
 
     socket.on('player_moved', (data) => {
+      // Trigger animation before updating state
+      if (data.path && data.path.length > 1) {
+        setMoveAnimation({ playerId: data.playerId, path: data.path });
+      }
       setGameState((prev) => {
         if (!prev) return prev;
         const players = { ...prev.players };
@@ -120,6 +130,8 @@ export function useSocket() {
 
     socket.on('battle_result', (data: BattleResult) => {
       setBattleResult(data);
+      SFX.battleStart();
+      Haptics.heavy();
     });
 
     socket.on('minigame_start', (data: MinigameInfo) => {
@@ -148,6 +160,11 @@ export function useSocket() {
       setBattleResult(null);
       setMinigameResults(null);
       if (minigameInfo) setPhase('playing');
+      // Notify player it's their turn
+      if (data.currentTurnPlayerId === playerIdRef.current) {
+        SFX.yourTurn();
+        Haptics.doublePulse();
+      }
     });
 
     socket.on('game_over', (data) => {
@@ -156,6 +173,8 @@ export function useSocket() {
         return { ...prev, winnerId: data.winnerId, state: 'finished', players: data.players };
       });
       setPhase('finished');
+      SFX.gameOver();
+      Haptics.success();
       sessionStorage.removeItem('ltm_session');
     });
 
@@ -180,8 +199,8 @@ export function useSocket() {
     socketRef.current?.emit('roll_dice', { useReroll });
   }, []);
 
-  const chooseMove = useCallback((tileId: number) => {
-    socketRef.current?.emit('choose_move', { tileId });
+  const chooseMove = useCallback((tileId: number, path?: number[]) => {
+    socketRef.current?.emit('choose_move', { tileId, path: path || [] });
     setDiceResult(null);
   }, []);
 
@@ -200,6 +219,7 @@ export function useSocket() {
     setMinigameResults(null);
     setPhase('playing');
   }, []);
+  const clearMoveAnimation = useCallback(() => setMoveAnimation(null), []);
 
   return {
     connected,
@@ -215,6 +235,7 @@ export function useSocket() {
     minigameResults,
     error,
     awaitingChoice,
+    moveAnimation,
     createSession,
     joinSession,
     startGame,
@@ -226,5 +247,6 @@ export function useSocket() {
     clearTileEffect,
     clearBattleResult,
     clearMinigameResults,
+    clearMoveAnimation,
   };
 }
