@@ -252,15 +252,6 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
         ctx.stroke();
       }
 
-      // Fork tile indicator: dashed outline
-      if (tile.isFork) {
-        _roundRect(ctx, rx - 3, ry - 3, TILE_W + 6, TILE_H + 6, TILE_CORNER + 3);
-        ctx.strokeStyle = '#f39c12';
-        ctx.lineWidth = 2;
-        ctx.setLineDash([4, 3]);
-        ctx.stroke();
-        ctx.setLineDash([]);
-      }
 
       ctx.globalAlpha = 1.0;
     }
