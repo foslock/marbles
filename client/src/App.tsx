@@ -118,6 +118,8 @@ export default function App() {
           onClearMinigameResults={socket.clearMinigameResults}
           onClearMoveAnimation={socket.clearMoveAnimation}
           onClearTileSwapAnimation={socket.clearTileSwapAnimation}
+          stealAnimation={socket.stealAnimation}
+          onClearStealAnimation={socket.clearStealAnimation}
           onTurnComplete={socket.turnComplete}
           onEndGame={socket.endGame}
         />

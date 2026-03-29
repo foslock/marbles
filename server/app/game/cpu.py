@@ -19,16 +19,21 @@ logger = logging.getLogger("ltm.cpu")
 # Per-type CPU score estimates.  Values are tuned so CPU lands in the middle
 # of a normal human score distribution — not dominating, not last.
 _CPU_SCORES: dict[str, tuple[int, int]] = {
-    "tap_count":   (18, 30),   # TapFrenzy: raw tap count over 5 s
-    "tracking":    (350, 600), # BallTracker: contact ms
-    "rhythm":      (300, 550), # RhythmPulse: timing accuracy points
-    "canvas_fill": (35, 55),   # ColorRush: % filled
-    "accelerometer": (300, 550),
-    "reaction":    (300, 600), # ReactionSnap: ms-based score (lower=better inverted)
-    "size_match":  (300, 600),
-    "memory":      (3, 7),     # MemoryFlash: correct sequence length
-    "dodge":       (300, 600), # SwipeDodge: survival score
-    "target_tap":  (4, 10),    # TargetPop: pops
+    "tap_count":     (18, 30),      # TapFrenzy: raw tap count over 5 s
+    "tracking":      (350, 600),    # BallTracker: contact ms
+    "rhythm":        (300, 550),    # RhythmPulse: timing accuracy points
+    "canvas_fill":   (35, 55),      # ColorRush: % filled
+    "accelerometer": (300, 550),    # TiltChase
+    "reaction":      (300, 600),    # ReactionSnap: ms-based score
+    "size_match":    (300, 600),    # SizeMatters
+    "memory":        (3, 7),        # MemoryFlash: correct sequence length
+    "dodge":         (300, 600),    # SwipeDodge: survival score
+    "target_tap":    (4, 10),       # TargetPop: pops
+    "tower_builder": (12000, 25000),# TowerBuilder: cumulative block area
+    "color_drop":    (300, 550),    # ColorDrop: +10 per catch, up to 800
+    "marble_runner": (1500, 4000),  # MarbleRunner: distance / 10
+    "pump_it":       (60, 130),     # PumpIt: air pressure 0-200
+    "light_switch":  (8, 18),       # LightSwitch: correct toggles in 7 s
 }
 
 

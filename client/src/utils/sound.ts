@@ -204,6 +204,15 @@ export const SFX = {
     setTimeout(() => playTone(300, 0.25, 'sine', 0.15), 200);
   },
 
+  /** Steal effect — sneaky descending swipe + chime */
+  stealEffect() {
+    playNoise(0.06, 0.1);
+    playTone(900, 0.08, 'sawtooth', 0.18);
+    setTimeout(() => playTone(700, 0.08, 'sawtooth', 0.15), 60);
+    setTimeout(() => playTone(500, 0.1, 'sawtooth', 0.12), 120);
+    setTimeout(() => playTone(1100, 0.15, 'sine', 0.2), 220);
+  },
+
   // ── Minigame-specific sounds ──────────────────────────────────────────────
 
   /** Quick tap click; slight random pitch so rapid taps feel distinct. */
