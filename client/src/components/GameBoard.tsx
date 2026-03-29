@@ -25,6 +25,7 @@ interface Props {
   activePlayerId?: string | null;
   tileSwapAnimation?: TileSwapAnimation | null;
   onSwapAnimationComplete?: () => void;
+  initialScale?: number;
 }
 
 // Tile dimensions
@@ -50,11 +51,11 @@ const MOVE_SPEED = 350;
 // ms for the landing ring animation after token arrives
 const LANDING_DURATION = 800;
 
-export function GameBoard({ board, players, reachableTiles, onTileClick, moveAnimation, onAnimationComplete, myPlayerId, activePlayerId, tileSwapAnimation, onSwapAnimationComplete }: Props) {
+export function GameBoard({ board, players, reachableTiles, onTileClick, moveAnimation, onAnimationComplete, myPlayerId, activePlayerId, tileSwapAnimation, onSwapAnimationComplete, initialScale = PLAYER_ZOOM }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
-  const [scale, setScale] = useState(PLAYER_ZOOM);
+  const [scale, setScale] = useState(initialScale);
   const dragRef = useRef({ dragging: false, startX: 0, startY: 0, offsetX: 0, offsetY: 0 });
 
   // Movement animation state
