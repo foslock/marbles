@@ -158,7 +158,6 @@ export function SpectatorView({
                     {p.name}
                     {isActive && <span style={styles.activeDot} />}
                   </div>
-                  <div style={styles.tokenLabel}>{p.token?.name}</div>
                   <div style={styles.marbleBar}>
                     <div
                       style={{
@@ -367,11 +366,6 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: '50%',
     background: '#f39c12',
     display: 'inline-block',
-  },
-  tokenLabel: {
-    color: '#5a6a8a',
-    fontSize: '11px',
-    fontStyle: 'italic',
   },
   marbleBar: {
     height: '4px',

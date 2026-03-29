@@ -21,7 +21,6 @@ export function GameOverScreen({ gameState }: Props) {
         <div style={styles.winnerCard}>
           <span style={styles.winnerEmoji}>{winner?.token?.emoji || '?'}</span>
           <h2 style={styles.winnerName}>{winner?.name}</h2>
-          <p style={styles.winnerToken}>{winner?.token?.name}</p>
           <p style={styles.winnerStats}>
             {winner?.marbles} marbles | {winner?.points} points
           </p>
@@ -85,12 +84,6 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '28px',
     fontWeight: 800,
     margin: '8px 0 0 0',
-  },
-  winnerToken: {
-    color: '#a8b2d1',
-    fontSize: '14px',
-    fontStyle: 'italic',
-    margin: '4px 0',
   },
   winnerStats: {
     color: '#ccd6f6',
