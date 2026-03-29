@@ -148,20 +148,39 @@ _UNSET = object()
 
 def generate_board(
     total_tiles: int | object = _UNSET,
-    num_forks: int = 2,
+    num_forks: int | object = _UNSET,
     seed: Optional[int] = None,
     player_count: int = 2,
 ) -> Board:
     if seed is not None:
         random.seed(seed)
 
-    # Scale board tile count with player count unless an explicit value was given.
-    # 2p → 40, 4p → 46, 6p → 52, 8p → 58
+    # Scale board size with player count: 2p → 20 tiles, 10p → 50 tiles
     if total_tiles is _UNSET:
-        total_tiles = 34 + player_count * 3
+        total_tiles = int(20 + (player_count - 2) * (30 / 8))
+        total_tiles = max(20, min(50, total_tiles))
 
-    alt_tiles_per_fork = [random.randint(4, 7) for _ in range(num_forks)]
+    # Scale forks: 2p → 2 branches, 6+p → up to 4 branches
+    if num_forks is _UNSET:
+        if player_count <= 4:
+            num_forks = 2
+        elif player_count <= 7:
+            num_forks = 3
+        else:
+            num_forks = 4
+
+    # Scale fork branch length with board size so small boards aren't overwhelmed
+    min_branch = max(2, total_tiles // 10)
+    max_branch = max(min_branch + 1, total_tiles // 6)
+    alt_tiles_per_fork = [random.randint(min_branch, max_branch) for _ in range(num_forks)]
     total_alt_tiles = sum(alt_tiles_per_fork)
+    # Ensure main loop has enough tiles (at least 10 or 60% of total)
+    min_main = max(10, int(total_tiles * 0.6))
+    while total_alt_tiles > total_tiles - min_main and any(a > min_branch for a in alt_tiles_per_fork):
+        # Shrink the largest branch
+        idx = alt_tiles_per_fork.index(max(alt_tiles_per_fork))
+        alt_tiles_per_fork[idx] -= 1
+        total_alt_tiles -= 1
     main_path_count = total_tiles - total_alt_tiles
 
     main_positions = _generate_main_loop_positions(main_path_count)
