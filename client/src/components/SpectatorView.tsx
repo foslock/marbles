@@ -1,16 +1,14 @@
 import { useMemo, useEffect } from 'react';
-import type { GameState, MinigameResults, BattleResult, TileEffect } from '../types/game';
+import type { GameState, MinigameResults, TileEffect } from '../types/game';
 import { GameBoard, type MoveAnimation } from './GameBoard';
 
 interface Props {
   gameState: GameState;
   tileEffect: TileEffect | null;
-  battleResult: BattleResult | null;
   minigameResults: MinigameResults | null;
   moveAnimation: MoveAnimation | null;
   onClearMoveAnimation: () => void;
   onClearTileEffect: () => void;
-  onClearBattleResult: () => void;
   onClearMinigameResults: () => void;
 }
 
@@ -22,12 +20,10 @@ interface Props {
 export function SpectatorView({
   gameState,
   tileEffect,
-  battleResult,
   minigameResults,
   moveAnimation,
   onClearMoveAnimation,
   onClearTileEffect,
-  onClearBattleResult,
   onClearMinigameResults,
 }: Props) {
   const sortedPlayers = useMemo(() => {
@@ -49,12 +45,6 @@ export function SpectatorView({
     const timer = setTimeout(onClearTileEffect, 6000);
     return () => clearTimeout(timer);
   }, [tileEffect, onClearTileEffect]);
-
-  useEffect(() => {
-    if (!battleResult) return;
-    const timer = setTimeout(onClearBattleResult, 5000);
-    return () => clearTimeout(timer);
-  }, [battleResult, onClearBattleResult]);
 
   useEffect(() => {
     if (!minigameResults) return;
@@ -94,20 +84,6 @@ export function SpectatorView({
             }}>
               <span style={styles.eventPlayerName}>{tileEffect.playerName}</span>
               <p style={styles.eventMessage}>{tileEffect.message}</p>
-            </div>
-          </div>
-        )}
-
-        {battleResult && (
-          <div style={styles.eventOverlay}>
-            <div style={{ ...styles.eventCard, borderColor: '#e74c3c' }}>
-              <h3 style={styles.battleTitle}>BATTLE!</h3>
-              <div style={styles.battleVs}>
-                <span style={styles.battleRoll}>{battleResult.playerRoll}</span>
-                <span style={styles.vs}>VS</span>
-                <span style={styles.battleRoll}>{battleResult.opponentRoll}</span>
-              </div>
-              <p style={styles.eventMessage}>{battleResult.message}</p>
             </div>
           </div>
         )}
@@ -263,30 +239,6 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 600,
     lineHeight: 1.4,
     margin: 0,
-  },
-  battleTitle: {
-    color: '#e74c3c',
-    fontSize: '36px',
-    fontWeight: 800,
-    letterSpacing: '4px',
-    margin: '0 0 16px 0',
-  },
-  battleVs: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '24px',
-    marginBottom: '16px',
-  },
-  battleRoll: {
-    color: '#f39c12',
-    fontSize: '56px',
-    fontWeight: 800,
-  },
-  vs: {
-    color: '#e74c3c',
-    fontSize: '24px',
-    fontWeight: 700,
   },
   podiumTitle: {
     color: '#f39c12',

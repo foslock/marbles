@@ -32,6 +32,10 @@ export function MinigameResultsOverlay({ results, onClose }: Props) {
       <div style={styles.card}>
         <h2 style={styles.title}>Results!</h2>
 
+        {results.bonus && (
+          <div style={styles.bonusAlert}>⚡ BONUS ROUND — 2× POINTS!</div>
+        )}
+
         {results.marbleBonus && (
           <div style={styles.marbleAlert}>MARBLE BONUS! Winners get marbles!</div>
         )}
@@ -98,6 +102,16 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '28px',
     fontWeight: 800,
     margin: '0 0 8px 0',
+  },
+  bonusAlert: {
+    background: 'rgba(243, 156, 18, 0.2)',
+    border: '2px solid #f39c12',
+    color: '#f39c12',
+    padding: '6px 12px',
+    borderRadius: '8px',
+    fontSize: '13px',
+    fontWeight: 800,
+    marginBottom: '8px',
   },
   marbleAlert: {
     background: 'rgba(243, 156, 18, 0.15)',

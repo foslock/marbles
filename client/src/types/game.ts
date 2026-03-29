@@ -98,19 +98,6 @@ export interface TileEffect {
   boardUpdates?: { id: number; color: 'green' | 'red' | 'neutral'; category: string; effect: string }[];
 }
 
-export interface BattleResult {
-  type: string;
-  playerRoll: number;
-  opponentRoll: number;
-  winnerId: string;
-  winnerName: string;
-  loserId: string;
-  loserName: string;
-  prizeRoll: number;
-  actualPrize: number;
-  message: string;
-}
-
 export interface MinigameInfo {
   minigame: {
     id: string;
@@ -123,6 +110,8 @@ export interface MinigameInfo {
   };
   participants: string[];
   message: string;
+  /** True when 3+ players share the tile — prizes are doubled. */
+  bonus?: boolean;
 }
 
 export interface MinigameResults {
@@ -135,6 +124,8 @@ export interface MinigameResults {
     prizeMarbles: number;
   }[];
   marbleBonus: boolean;
+  /** True when this was a bonus round (3+ players on same tile). */
+  bonus?: boolean;
 }
 
 export type GamePhase = 'home' | 'lobby' | 'playing' | 'minigame' | 'finished';
