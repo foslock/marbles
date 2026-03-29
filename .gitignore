@@ -209,3 +209,4 @@ __marimo__/
 # Node.js
 node_modules/
 client/dist/
+*.tsbuildinfo
