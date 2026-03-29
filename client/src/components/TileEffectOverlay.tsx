@@ -32,10 +32,12 @@ const EFFECT_ICONS: Record<string, string> = {
 };
 
 const MIN_DISPLAY_MS = 3000;
+const AUTO_DISMISS_MS = 10000;
 
 export function TileEffectOverlay({ effect, playerToken, onClose }: Props) {
   const [visible, setVisible] = useState(false);
   const [canDismiss, setCanDismiss] = useState(false);
+  const [progress, setProgress] = useState(0);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
 
@@ -56,10 +58,21 @@ export function TileEffectOverlay({ effect, playerToken, onClose }: Props) {
 
   useEffect(() => {
     const unlockTimer = setTimeout(() => setCanDismiss(true), MIN_DISPLAY_MS);
-    const autoTimer = setTimeout(() => onCloseRef.current(), 6000);
+    const autoTimer = setTimeout(() => onCloseRef.current(), AUTO_DISMISS_MS);
+
+    // Animate progress bar
+    const start = Date.now();
+    const tick = () => {
+      const elapsed = Date.now() - start;
+      setProgress(Math.min(elapsed / AUTO_DISMISS_MS, 1));
+      if (elapsed < AUTO_DISMISS_MS) rafId = requestAnimationFrame(tick);
+    };
+    let rafId = requestAnimationFrame(tick);
+
     return () => {
       clearTimeout(unlockTimer);
       clearTimeout(autoTimer);
+      cancelAnimationFrame(rafId);
     };
   }, []);
 
@@ -120,7 +133,10 @@ export function TileEffectOverlay({ effect, playerToken, onClose }: Props) {
             +{effect.autoMarbles} marble(s) from points!
           </p>
         ) : null}
-        <span style={styles.tap}>{canDismiss ? 'Tap to dismiss' : '…'}</span>
+        <span style={styles.tap}>{canDismiss ? 'Tap to dismiss' : '...'}</span>
+        <div style={styles.progressTrack}>
+          <div style={{ ...styles.progressFill, width: `${progress * 100}%` }} />
+        </div>
       </div>
     </div>
   );
@@ -212,5 +228,19 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '11px',
     marginTop: '12px',
     display: 'block',
+  },
+  progressTrack: {
+    width: '100%',
+    height: '3px',
+    background: '#1e3a5f',
+    borderRadius: '2px',
+    marginTop: '10px',
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    background: '#5a6a8a',
+    borderRadius: '2px',
+    transition: 'width 0.1s linear',
   },
 };

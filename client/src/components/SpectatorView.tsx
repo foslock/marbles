@@ -14,6 +14,7 @@ interface Props {
   onClearTileEffect: () => void;
   onClearMinigameResults: () => void;
   onClearTileSwapAnimation: () => void;
+  onTurnComplete: () => void;
 }
 
 /**
@@ -32,6 +33,7 @@ export function SpectatorView({
   onClearTileEffect,
   onClearMinigameResults,
   onClearTileSwapAnimation,
+  onTurnComplete,
 }: Props) {
   const sortedPlayers = useMemo(() => {
     return Object.values(gameState.players)
@@ -49,15 +51,21 @@ export function SpectatorView({
   // Auto-dismiss overlays so they never get permanently stuck
   useEffect(() => {
     if (!tileEffect) return;
-    const timer = setTimeout(onClearTileEffect, 6000);
+    const timer = setTimeout(() => {
+      onClearTileEffect();
+      onTurnComplete();
+    }, 10000);
     return () => clearTimeout(timer);
-  }, [tileEffect, onClearTileEffect]);
+  }, [tileEffect, onClearTileEffect, onTurnComplete]);
 
   useEffect(() => {
     if (!minigameResults) return;
-    const timer = setTimeout(onClearMinigameResults, 8000);
+    const timer = setTimeout(() => {
+      onClearMinigameResults();
+      onTurnComplete();
+    }, 10000);
     return () => clearTimeout(timer);
-  }, [minigameResults, onClearMinigameResults]);
+  }, [minigameResults, onClearMinigameResults, onTurnComplete]);
 
   return (
     <div style={styles.container}>
