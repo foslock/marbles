@@ -16,6 +16,7 @@ interface Props {
   moveAnimation?: MoveAnimation | null;
   onAnimationComplete?: () => void;
   myPlayerId?: string | null;
+  activePlayerId?: string | null;
 }
 
 // Tile dimensions
@@ -36,7 +37,7 @@ const EDGE_COLOR = '#1a3a5c';
 // How much to zoom in on the player's tile
 const PLAYER_ZOOM = 2.5;
 
-export function GameBoard({ board, players, reachableTiles, onTileClick, moveAnimation, onAnimationComplete, myPlayerId }: Props) {
+export function GameBoard({ board, players, reachableTiles, onTileClick, moveAnimation, onAnimationComplete, myPlayerId, activePlayerId }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
@@ -94,6 +95,21 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [board?.width]); // only on initial board load (width is stable after generation)
+
+  // Follow the active player when the turn changes.
+  // If it's our turn, re-center on ourselves; otherwise pan to the active player.
+  useEffect(() => {
+    if (!board || !activePlayerId) return;
+    if (activePlayerId === myPlayerId) {
+      centerOnMyPlayer();
+    } else {
+      const active = players.find((p) => p.id === activePlayerId);
+      if (!active) return;
+      const tile = board.tiles[String(active.currentTile)];
+      if (tile) centerOnTile(tile.x, tile.y, PLAYER_ZOOM);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activePlayerId]);
 
   // Helper: draw a rounded rectangle path
   function _roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
@@ -309,11 +325,14 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
         animRef.current = null;
         draw();
         onAnimationComplete?.();
-        // Re-centre on the player after they finish moving
-        if (moveAnimation.playerId === myPlayerId) {
-          const lastTileId = moveAnimation.path[moveAnimation.path.length - 1];
-          const destTile = board.tiles[String(lastTileId)];
-          if (destTile) centerOnTile(destTile.x, destTile.y, PLAYER_ZOOM);
+        // Re-centre on whichever player just moved (us or the active opponent)
+        const lastTileId = moveAnimation.path[moveAnimation.path.length - 1];
+        const destTile = board.tiles[String(lastTileId)];
+        if (destTile) {
+          if (moveAnimation.playerId === myPlayerId ||
+              moveAnimation.playerId === activePlayerId) {
+            centerOnTile(destTile.x, destTile.y, PLAYER_ZOOM);
+          }
         }
         return;
       }
@@ -327,7 +346,7 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       animRef.current = null;
     };
-  }, [moveAnimation, board, draw, onAnimationComplete, myPlayerId, centerOnTile]);
+  }, [moveAnimation, board, draw, onAnimationComplete, myPlayerId, activePlayerId, centerOnTile]);
 
   // Pan handlers
   const handlePointerDown = (e: React.PointerEvent) => {

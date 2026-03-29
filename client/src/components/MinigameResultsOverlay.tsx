@@ -8,7 +8,7 @@ interface Props {
 
 const PODIUM_COLORS = ['#f39c12', '#bdc3c7', '#cd7f32'];
 const PODIUM_LABELS = ['1st', '2nd', '3rd'];
-const DISMISS_DELAY_MS = 2000;
+const DISMISS_DELAY_MS = 3000;
 
 export function MinigameResultsOverlay({ results, onClose }: Props) {
   const [canDismiss, setCanDismiss] = useState(false);

@@ -29,7 +29,7 @@ const EFFECT_ICONS: Record<string, string> = {
   fortune_cookie: '🥠',
 };
 
-const MIN_DISPLAY_MS = 1000;
+const MIN_DISPLAY_MS = 3000;
 
 export function TileEffectOverlay({ effect, onClose }: Props) {
   const [visible, setVisible] = useState(false);
@@ -54,7 +54,7 @@ export function TileEffectOverlay({ effect, onClose }: Props) {
 
   useEffect(() => {
     const unlockTimer = setTimeout(() => setCanDismiss(true), MIN_DISPLAY_MS);
-    const autoTimer = setTimeout(() => onCloseRef.current(), 3000);
+    const autoTimer = setTimeout(() => onCloseRef.current(), 6000);
     return () => {
       clearTimeout(unlockTimer);
       clearTimeout(autoTimer);

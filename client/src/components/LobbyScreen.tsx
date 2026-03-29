@@ -4,9 +4,10 @@ interface Props {
   lobby: LobbyData;
   playerId: string | null;
   onStartGame: () => void;
+  onAddCpu: () => void;
 }
 
-export function LobbyScreen({ lobby, playerId, onStartGame }: Props) {
+export function LobbyScreen({ lobby, playerId, onStartGame, onAddCpu }: Props) {
   const isHost = playerId === lobby.hostId;
   const players = lobby.players.filter((p) => p.role === 'player');
   const spectators = lobby.players.filter((p) => p.role === 'spectator');
@@ -30,9 +31,10 @@ export function LobbyScreen({ lobby, playerId, onStartGame }: Props) {
           {players.map((p) => (
             <div key={p.id} style={styles.playerCard}>
               <span style={styles.playerEmoji}>
-                {p.id === lobby.hostId ? '👑' : '🎮'}
+                {p.isCpu ? '🤖' : p.id === lobby.hostId ? '👑' : '🎮'}
               </span>
               <span style={styles.playerName}>{p.name}</span>
+              {p.isCpu && <span style={styles.cpuBadge}>CPU</span>}
               {p.id === playerId && (
                 <span style={styles.youBadge}>You</span>
               )}
@@ -67,16 +69,23 @@ export function LobbyScreen({ lobby, playerId, onStartGame }: Props) {
       </div>
 
       {isHost && (
-        <button
-          style={{
-            ...styles.startButton,
-            ...(players.length < 2 ? styles.startButtonDisabled : {}),
-          }}
-          onClick={onStartGame}
-          disabled={players.length < 2}
-        >
-          {players.length < 2 ? 'Need 2+ Players' : 'Start Game!'}
-        </button>
+        <div style={styles.hostActions}>
+          {players.length < 8 && (
+            <button style={styles.cpuButton} onClick={onAddCpu}>
+              + Add CPU Player
+            </button>
+          )}
+          <button
+            style={{
+              ...styles.startButton,
+              ...(players.length < 2 ? styles.startButtonDisabled : {}),
+            }}
+            onClick={onStartGame}
+            disabled={players.length < 2}
+          >
+            {players.length < 2 ? 'Need 2+ Players' : 'Start Game!'}
+          </button>
+        </div>
       )}
 
       {!isHost && (
@@ -215,5 +224,29 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '14px',
     marginTop: 'auto',
     padding: '16px',
+  },
+  hostActions: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '8px',
+    marginTop: 'auto',
+  },
+  cpuButton: {
+    padding: '12px',
+    fontSize: '15px',
+    fontWeight: 600,
+    border: '2px solid #3498db',
+    borderRadius: '12px',
+    background: 'transparent',
+    color: '#3498db',
+    cursor: 'pointer',
+  },
+  cpuBadge: {
+    background: '#1a4a6e',
+    color: '#3498db',
+    fontSize: '11px',
+    fontWeight: 600,
+    padding: '2px 8px',
+    borderRadius: '10px',
   },
 };

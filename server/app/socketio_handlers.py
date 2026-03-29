@@ -1,10 +1,11 @@
 """Socket.IO event handlers for Losing Their Marbles."""
 
+import asyncio
 import random
 import logging
 import socketio
 
-from .game.state import session_manager
+from .game.state import session_manager, PlayerState
 from .game.passphrase import generate_passphrase
 from .game.effects import process_tile_effect, apply_choice_effect
 from .game.battle import check_for_battle, resolve_dice_battle
@@ -13,6 +14,7 @@ from .game.minigames.base import (
     calculate_rankings,
     apply_minigame_prizes,
 )
+from .game.cpu import run_cpu_turn, cpu_minigame_score
 
 logger = logging.getLogger("ltm")
 
@@ -219,6 +221,13 @@ async def start_game(sid, data):
 
     await sio.emit("game_started", session.to_game_dict(), room=session_id_actual)
 
+    # If the first player is a CPU, schedule their turn
+    first_player_id = session.current_turn_player_id
+    if first_player_id:
+        first_player = session.players.get(first_player_id)
+        if first_player and first_player.is_cpu:
+            asyncio.create_task(_run_cpu_turn_task(session, first_player))
+
     # Persist game start
     await _persist_session(session)
     await _persist_board(session)
@@ -226,6 +235,45 @@ async def start_game(sid, data):
         "playerCount": len(session.get_players()),
         "targetMarbles": session.target_marbles,
     })
+
+
+@sio.event
+async def add_cpu_player(sid, data):
+    """Host adds a CPU player to the lobby."""
+    player_mapping = session_manager.sid_to_player.get(sid)
+    if not player_mapping:
+        return
+
+    session_id, player_id = player_mapping
+    session = session_manager.get_session(session_id)
+    if not session or session.host_id != player_id:
+        await sio.emit("error", {"message": "Only the host can add CPU players."}, to=sid)
+        return
+
+    if session.state != "lobby":
+        await sio.emit("error", {"message": "Can only add CPU players in the lobby."}, to=sid)
+        return
+
+    if len(session.get_players()) >= 8:
+        await sio.emit("error", {"message": "Game is full! Maximum 8 players."}, to=sid)
+        return
+
+    cpu_number = sum(1 for p in session.get_players() if p.is_cpu) + 1
+    cpu_name = f"CPU {cpu_number}"
+
+    import uuid
+    cpu_id = str(uuid.uuid4())
+    cpu_player = PlayerState(
+        id=cpu_id,
+        sid="",
+        name=cpu_name,
+        role="player",
+        is_cpu=True,
+        is_connected=True,
+    )
+    session.players[cpu_id] = cpu_player
+
+    await sio.emit("lobby_update", session.to_lobby_dict(), room=session_id)
 
 
 @sio.event
@@ -449,6 +497,27 @@ async def _check_battle_and_end_turn(session, player):
                 "participants": battle["participants"],
                 "message": battle["message"],
             }, room=session.id)
+
+            # Auto-submit scores for any CPU participants immediately
+            for pid in battle["participants"]:
+                p = session.players.get(pid)
+                if p and p.is_cpu:
+                    session._minigame_scores[pid] = cpu_minigame_score(minigame["type"])
+
+            # If all participants are CPU, resolve immediately
+            if set(session._minigame_scores.keys()) >= set(session._minigame_participants):
+                player_names = {pid: session.players[pid].name for pid in session._minigame_scores}
+                result = calculate_rankings(session._minigame_scores, player_names)
+                apply_minigame_prizes(session, result)
+                await sio.emit("minigame_results", {
+                    "rankings": result.rankings,
+                    "marbleBonus": result.marble_bonus,
+                }, room=session.id)
+                session._minigame_scores = {}
+                session._minigame_participants = []
+                _end_turn(session)
+                await _send_turn_update(session)
+
             return  # Turn ends after minigame completes
 
         elif battle["type"] == "dice_battle":
@@ -491,6 +560,27 @@ async def _send_turn_update(session):
         "turnNumber": session.turn_number,
         "players": session.to_game_dict()["players"],
     }, room=session.id)
+
+    # If the next player is a CPU, schedule their turn automatically
+    player_id = session.current_turn_player_id
+    if player_id:
+        player = session.players.get(player_id)
+        if player and player.is_cpu:
+            asyncio.create_task(_run_cpu_turn_task(session, player))
+
+
+async def _run_cpu_turn_task(session, player):
+    """Wrapper that runs a CPU turn as a background task."""
+    try:
+        await run_cpu_turn(
+            sio,
+            session,
+            player,
+            _get_reachable_tiles,
+            _check_battle_and_end_turn,
+        )
+    except Exception as e:
+        logger.error(f"CPU turn error for {player.name}: {e}", exc_info=True)
 
 
 def _get_reachable_tiles(session, start_tile: int, steps: int) -> list[dict]:
