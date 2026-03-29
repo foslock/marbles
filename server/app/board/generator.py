@@ -143,8 +143,11 @@ class Board:
         }
 
 
+_UNSET = object()
+
+
 def generate_board(
-    total_tiles: int = 45,
+    total_tiles: int | object = _UNSET,
     num_forks: int = 2,
     seed: Optional[int] = None,
     player_count: int = 2,
@@ -152,10 +155,10 @@ def generate_board(
     if seed is not None:
         random.seed(seed)
 
-    # Scale board tile count with player count so more players = more tiles,
-    # but not so many that collisions become rare.
+    # Scale board tile count with player count unless an explicit value was given.
     # 2p → 40, 4p → 46, 6p → 52, 8p → 58
-    total_tiles = 34 + player_count * 3
+    if total_tiles is _UNSET:
+        total_tiles = 34 + player_count * 3
 
     alt_tiles_per_fork = [random.randint(4, 7) for _ in range(num_forks)]
     total_alt_tiles = sum(alt_tiles_per_fork)
