@@ -2,6 +2,7 @@ import { useMemo, useEffect } from 'react';
 import type { GameState, MinigameResults, TileEffect, ActivityItem } from '../types/game';
 import { GameBoard, type MoveAnimation, type TileSwapAnimation } from './GameBoard';
 import { ActivityFeed } from './ActivityFeed';
+import { Fireworks } from './Fireworks';
 
 interface Props {
   gameState: GameState;
@@ -115,6 +116,8 @@ export function SpectatorView({
 
         {minigameResults && !moveAnimation && (
           <div style={styles.eventOverlay}>
+            {/* Fireworks fill the board area behind the results card */}
+            <Fireworks intensity="normal" />
             <div style={{ ...styles.eventCard, borderColor: '#f39c12' }}>
               <h3 style={styles.podiumTitle}>Minigame Results!</h3>
               {minigameResults.marbleBonus && (
