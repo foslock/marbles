@@ -167,7 +167,16 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
 
     const tiles = Object.values(board.tiles);
 
-    // Draw edges
+    const now = Date.now();
+    // pulse: 0.0–1.0, drives reachable-tile glow and active-token ring
+    const pulse = Math.sin(now / 300) * 0.5 + 0.5;
+    // bounce: ±5 px vertical float for the active player token
+    const bounce = Math.sin(now / 700) * 5;
+    const hasReachable = reachableSet.size > 0;
+
+    // Draw edges — dim them slightly when a move choice is pending so
+    // the highlighted tiles pop more.
+    ctx.globalAlpha = hasReachable ? 0.25 : 1.0;
     ctx.strokeStyle = EDGE_COLOR;
     ctx.lineWidth = 3;
     const drawnEdges = new Set<string>();
@@ -184,8 +193,7 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
         ctx.stroke();
       }
     }
-
-    const pulse = Math.sin(Date.now() / 400) * 0.3 + 0.7; // 0.4–1.0
+    ctx.globalAlpha = 1.0;
 
     // Draw tiles
     for (const tile of tiles) {
@@ -194,6 +202,9 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
 
       const rx = tile.x - TILE_W / 2;
       const ry = tile.y - TILE_H / 2;
+
+      // Dim tiles that are not valid move targets while a choice is pending
+      ctx.globalAlpha = hasReachable && !isReachable ? 0.28 : 1.0;
 
       // Tile background (rounded rect)
       _roundRect(ctx, rx, ry, TILE_W, TILE_H, TILE_CORNER);
@@ -206,17 +217,31 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
       ctx.fillStyle = innerColor;
       ctx.fill();
 
-      // Reachable: animated orange outline on the rounded rect
+      // Reachable: pronounced glow + animated border + outer ring
       if (isReachable) {
+        // Canvas shadow for the glow effect
+        ctx.shadowBlur = 16 + pulse * 16;
+        ctx.shadowColor = 'rgba(243, 156, 18, 0.9)';
+
+        // Bold animated border
         _roundRect(ctx, rx, ry, TILE_W, TILE_H, TILE_CORNER);
-        ctx.strokeStyle = `rgba(243, 156, 18, ${pulse})`;
-        ctx.lineWidth = 3;
+        ctx.strokeStyle = `rgba(243, 156, 18, ${0.7 + pulse * 0.3})`;
+        ctx.lineWidth = 4;
         ctx.stroke();
 
-        // Subtle glow fill
+        // Warm fill
         _roundRect(ctx, rx, ry, TILE_W, TILE_H, TILE_CORNER);
-        ctx.fillStyle = `rgba(243, 156, 18, ${pulse * 0.08})`;
+        ctx.fillStyle = `rgba(243, 156, 18, ${0.10 + pulse * 0.18})`;
         ctx.fill();
+
+        // Outer pulsing ring
+        _roundRect(ctx, rx - 5, ry - 5, TILE_W + 10, TILE_H + 10, TILE_CORNER + 5);
+        ctx.strokeStyle = `rgba(243, 156, 18, ${pulse * 0.55})`;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        ctx.shadowBlur = 0;
+        ctx.shadowColor = 'transparent';
       }
 
       // Fork tile indicator: dashed outline
@@ -228,6 +253,8 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
         ctx.stroke();
         ctx.setLineDash([]);
       }
+
+      ctx.globalAlpha = 1.0;
     }
 
     // Draw player tokens (skip the actively-moving player — shown at interpolated position)
@@ -246,7 +273,16 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
         const p = tilePlayers[i];
         const angle = (i / tilePlayers.length) * Math.PI * 2 - Math.PI / 2;
         const spread = tilePlayers.length > 1 ? 14 : 0;
-        _drawToken(ctx, tile.x + Math.cos(angle) * spread, tile.y + Math.sin(angle) * spread, p);
+        const isActive = p.id === activePlayerId;
+        _drawToken(
+          ctx,
+          tile.x + Math.cos(angle) * spread,
+          tile.y + Math.sin(angle) * spread,
+          p,
+          isActive,
+          isActive ? bounce : 0,
+          pulse,
+        );
       }
     }
 
@@ -267,7 +303,7 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
         ctx.fillStyle = 'rgba(243, 156, 18, 0.3)';
         ctx.fill();
 
-        _drawToken(ctx, ax, ay, animPlayer);
+        _drawToken(ctx, ax, ay, animPlayer, false, 0, pulse);
       }
     }
 
@@ -315,7 +351,7 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
     }
 
     ctx.restore();
-  }, [board, players, reachableSet, offset, scale]);
+  }, [board, players, reachableSet, offset, scale, activePlayerId]);
 
   useEffect(() => {
     draw();
@@ -323,7 +359,7 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
     window.addEventListener('resize', handleResize);
 
     let pulseRaf = 0;
-    if (reachableTiles.length > 0) {
+    if (reachableTiles.length > 0 || activePlayerId) {
       const pulseTick = () => {
         draw();
         pulseRaf = requestAnimationFrame(pulseTick);
@@ -335,7 +371,7 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
       window.removeEventListener('resize', handleResize);
       if (pulseRaf) cancelAnimationFrame(pulseRaf);
     };
-  }, [draw, reachableTiles.length]);
+  }, [draw, reachableTiles.length, activePlayerId]);
 
   // Move animation (includes landing ring phase before calling onAnimationComplete)
   useEffect(() => {
@@ -519,9 +555,34 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
   );
 }
 
-function _drawToken(ctx: CanvasRenderingContext2D, px: number, py: number, p: PlayerState) {
+function _drawToken(
+  ctx: CanvasRenderingContext2D,
+  px: number,
+  py: number,
+  p: PlayerState,
+  isActive = false,
+  bounceY = 0,
+  pulse = 0,
+) {
+  const y = py + bounceY;
+
+  if (isActive) {
+    // Outer soft glow disc
+    ctx.beginPath();
+    ctx.arc(px, y, 20, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(243, 156, 18, ${0.12 + pulse * 0.10})`;
+    ctx.fill();
+
+    // Animated ring around the token
+    ctx.beginPath();
+    ctx.arc(px, y, 15, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(243, 156, 18, ${0.6 + pulse * 0.4})`;
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+  }
+
   ctx.beginPath();
-  ctx.arc(px, py, 10, 0, Math.PI * 2);
+  ctx.arc(px, y, 10, 0, Math.PI * 2);
   ctx.fillStyle = p.token?.color || '#fff';
   ctx.fill();
   ctx.strokeStyle = '#fff';
@@ -530,7 +591,7 @@ function _drawToken(ctx: CanvasRenderingContext2D, px: number, py: number, p: Pl
   ctx.font = '12px sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(p.token?.emoji || '?', px, py + 1);
+  ctx.fillText(p.token?.emoji || '?', px, y + 1);
 }
 
 const styles: Record<string, React.CSSProperties> = {
