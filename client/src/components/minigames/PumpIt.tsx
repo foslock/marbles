@@ -5,19 +5,14 @@ import { SFX } from '../../utils/sound';
 // ── Tuning ────────────────────────────────────────────────────────────────────
 const HANDLE_TRAVEL = 80;   // px the handle moves top to bottom
 const AIR_PER_PX    = 0.8;  // air added per px of downward handle movement
-const LEAK_RATE     = 11;   // air units / second (stops pumping → deflates in ~18 s from max)
-const MAX_AIR       = 200;  // balloon can inflate past "100%"
+const LEAK_RATE     = 11;   // air units / second
 
 // Balloon radius in the SVG viewBox (250 × 250 canvas)
 const MIN_R =  13;  // deflated
-const MAX_R = 108;  // fully inflated
+const MAX_R = 108;  // visual radius at 100% — keeps growing beyond
 
-// ── Pump geometry (relative to the pumpSection div, 215 px tall) ──────────────
-// handleBar: top = 8 + handleOffset (travels from 8 → 88)
-// rod:       top = 22 + handleOffset, height = 82 − handleOffset (shortens to 2 px)
-// pumpBody:  top = 104, height = 90
-// base:      top = 194, height = 18
-const PUMP_HANDLE_REST_TOP = 8;  // px from top of pumpSection
+// ── Pump geometry (relative to the pumpWrap div, 215 px tall) ────────────────
+const PUMP_HANDLE_REST_TOP = 8;
 const PUMP_BODY_TOP        = 104;
 
 export function PumpIt({ onScoreUpdate }: MinigameComponentProps) {
@@ -30,9 +25,10 @@ export function PumpIt({ onScoreUpdate }: MinigameComponentProps) {
   const scoreRef      = useRef(0);
   const [score, setScore] = useState(0);
 
-  const dragRef        = useRef<{ startY: number; startOffset: number } | null>(null);
+  // Frame-to-frame drag tracking — stores last clientY
+  const lastYRef       = useRef<number | null>(null);
   const firedRef       = useRef(false); // sound fired this downstroke?
-  const canInflateRef  = useRef(true);  // true once handle returns to top; false after reaching bottom
+  const canInflateRef  = useRef(true);  // true once handle returns to top
   const rafRef    = useRef(0);
   const lastTRef  = useRef(0);
 
@@ -57,30 +53,31 @@ export function PumpIt({ onScoreUpdate }: MinigameComponentProps) {
     return () => cancelAnimationFrame(rafRef.current);
   }, [onScoreUpdate]);
 
-  // ── Pointer handlers ────────────────────────────────────────────────────────
+  // ── Pointer handlers — attached to the entire bottom interaction zone ──────
   const onPointerDown = useCallback((e: React.PointerEvent) => {
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    // Track continuous drag: store the current clientY so every move is relative
-    // to the previous position, not the initial touch point.
-    dragRef.current = { startY: e.clientY, startOffset: handleOffRef.current };
+    lastYRef.current = e.clientY;
   }, []);
 
   const onPointerMove = useCallback((e: React.PointerEvent) => {
-    if (!dragRef.current) return;
+    if (lastYRef.current === null) return;
 
-    // Continuously track finger position relative to where the drag started
-    const dy      = e.clientY - dragRef.current.startY;
-    const newOff  = Math.max(0, Math.min(HANDLE_TRAVEL, dragRef.current.startOffset + dy));
-    const downPx  = newOff - handleOffRef.current;
+    // Frame-to-frame delta — positive = finger moved down
+    const dy = e.clientY - lastYRef.current;
+    lastYRef.current = e.clientY;
+
+    const prevOff = handleOffRef.current;
+    const newOff  = Math.max(0, Math.min(HANDLE_TRAVEL, prevOff + dy));
+    const downPx  = newOff - prevOff;
 
     // Handle returned to top → allow next inflation
     if (newOff < HANDLE_TRAVEL * 0.15) {
       canInflateRef.current = true;
     }
 
-    // Add air only on downstroke when canInflate is true
+    // Add air only on downstroke when canInflate is true (no cap)
     if (downPx > 0 && canInflateRef.current) {
-      airRef.current = Math.min(MAX_AIR, airRef.current + downPx * AIR_PER_PX);
+      airRef.current = airRef.current + downPx * AIR_PER_PX;
     }
 
     // At bottom of stroke: lock out inflation until handle returns to top
@@ -88,12 +85,12 @@ export function PumpIt({ onScoreUpdate }: MinigameComponentProps) {
       canInflateRef.current = false;
     }
 
-    // Fire pump sound once per downstroke (at ≥ 75 % travel)
+    // Fire pump sound once per downstroke (at >= 75% travel)
     if (newOff >= HANDLE_TRAVEL * 0.75 && !firedRef.current) {
       firedRef.current = true;
       SFX.minigamePump();
     }
-    // Allow sound to re-fire after handle returns past 25 %
+    // Allow sound to re-fire after handle returns past 25%
     if (newOff < HANDLE_TRAVEL * 0.25) {
       firedRef.current = false;
     }
@@ -103,42 +100,44 @@ export function PumpIt({ onScoreUpdate }: MinigameComponentProps) {
   }, []);
 
   const onPointerUp = useCallback(() => {
-    // Spring the handle back to the top so the player can immediately push down again
+    // Spring the handle back to the top
     handleOffRef.current = 0;
     setHandleOffset(0);
     canInflateRef.current = true;
     firedRef.current = false;
-    dragRef.current = null;
+    lastYRef.current = null;
   }, []);
 
   // ── Derived visuals ─────────────────────────────────────────────────────────
-  // Balloon grows visually all the way to MAX_AIR (200)
-  const airFrac   = Math.min(1, air / MAX_AIR);
-  const balloonR  = MIN_R + (MAX_R - MIN_R) * airFrac;
+  // Balloon grows continuously — use sqrt scaling past 100% so it doesn't explode
+  const balloonR = air <= 100
+    ? MIN_R + (MAX_R - MIN_R) * (air / 100)
+    : MAX_R + (Math.sqrt(air - 100)) * 5;
 
   // Balloon colour: deep red, brightens slightly when fuller
   const hue = 356;
+  const airFrac = Math.min(1, air / 100);
   const sat = 75 + airFrac * 15;
   const lit = 52 - airFrac * 10;
 
   // Rod shortens as handle is pushed down
-  const rodTop    = PUMP_HANDLE_REST_TOP + 14 + handleOffset;          // 22 + offset
-  const rodHeight = Math.max(2, PUMP_BODY_TOP - rodTop);               // 82 − offset → 2
+  const rodTop    = PUMP_HANDLE_REST_TOP + 14 + handleOffset;
+  const rodHeight = Math.max(2, PUMP_BODY_TOP - rodTop);
 
   return (
     <div style={styles.container}>
       {/* Score */}
       <span style={styles.scoreDisplay}>{score}</span>
 
-      {/* ── Balloon ── */}
+      {/* ── Balloon (top half) ── */}
       <div style={styles.balloonSection}>
         <svg width={250} height={260} viewBox="0 0 250 260" style={{ overflow: 'visible' }}>
-          {/* Soft glow when above 70 % */}
-          {airFrac > 0.7 && (
+          {/* Soft glow when above 70% */}
+          {air > 70 && (
             <ellipse
               cx={125} cy={118}
               rx={balloonR * 1.5} ry={balloonR * 1.5}
-              fill={`hsla(${hue}, 90%, 65%, ${(airFrac - 0.7) * 0.28})`}
+              fill={`hsla(${hue}, 90%, 65%, ${Math.min(0.28, (air - 70) * 0.003)})`}
             />
           )}
 
@@ -151,7 +150,7 @@ export function PumpIt({ onScoreUpdate }: MinigameComponentProps) {
           />
 
           {/* Sheen highlight */}
-          {airFrac > 0.04 && (
+          {air > 4 && (
             <ellipse
               cx={125 - balloonR * 0.22}
               cy={118 - balloonR * 0.3}
@@ -162,7 +161,7 @@ export function PumpIt({ onScoreUpdate }: MinigameComponentProps) {
           )}
 
           {/* Knot */}
-          {airFrac > 0.04 && (
+          {air > 4 && (
             <circle
               cx={125}
               cy={118 + balloonR * 0.96}
@@ -184,9 +183,9 @@ export function PumpIt({ onScoreUpdate }: MinigameComponentProps) {
         <div style={styles.airLabel}>{Math.round(air)}%</div>
       </div>
 
-      {/* ── Pump section ── */}
+      {/* ── Bottom half: full-width touch zone with pump visual ── */}
       <div
-        style={styles.pumpSection}
+        style={styles.touchZone}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
@@ -255,7 +254,7 @@ export function PumpIt({ onScoreUpdate }: MinigameComponentProps) {
             <div style={{
               position: 'absolute',
               bottom: 0, left: 4, right: 4,
-              height: `${Math.min(100, air / MAX_AIR * 100)}%`,
+              height: `${Math.min(100, air)}%`,
               background: `hsl(${hue}, 80%, 52%)`,
               borderRadius: '2px 2px 0 0',
               opacity: 0.55,
@@ -290,7 +289,7 @@ export function PumpIt({ onScoreUpdate }: MinigameComponentProps) {
           }} />
         </div>
 
-        <p style={styles.hint}>Drag DOWN then back UP to pump</p>
+        <p style={styles.hint}>Drag up &amp; down to pump</p>
       </div>
     </div>
   );
@@ -334,10 +333,10 @@ const styles: Record<string, React.CSSProperties> = {
     marginTop: 2,
     marginBottom: 4,
   },
-  pumpSection: {
+  touchZone: {
     width: '100%',
-    height: 215,
-    flexShrink: 0,
+    flex: '1 0 50%',
+    minHeight: 220,
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
@@ -349,12 +348,13 @@ const styles: Record<string, React.CSSProperties> = {
     width: 120,
     height: 215,
     flexShrink: 0,
+    pointerEvents: 'none',
   },
   hint: {
     color: 'rgba(255,255,255,0.28)',
     fontSize: '11px',
     letterSpacing: '0.4px',
-    margin: 0,
+    margin: '4px 0 0 0',
     pointerEvents: 'none',
   },
 };
