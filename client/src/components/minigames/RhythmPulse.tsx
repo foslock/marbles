@@ -1,15 +1,40 @@
 import { useState, useEffect, useRef } from 'react';
 import type { MinigameComponentProps } from './types';
 
+/** Synthesize a short metronome click using Web Audio. */
+function playClick(beat: boolean) {
+  try {
+    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    // Accent the downbeat with a higher, brighter tone
+    osc.type = beat ? 'triangle' : 'sine';
+    osc.frequency.value = beat ? 1200 : 880;
+    gain.gain.value = beat ? 0.35 : 0.22;
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.06);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.06);
+  } catch {
+    // Web Audio not available — silent fallback
+  }
+}
+
 export function RhythmPulse({ onScoreUpdate, config }: MinigameComponentProps) {
   const [flash, setFlash] = useState(false);
   // Use server-sent BPM so all players get the same rhythm
   const [bpm] = useState(() => (config?.bpm as number) || 80 + Math.floor(Math.random() * 80));
   const scoreRef = useRef(0);
   const lastFlash = useRef(Date.now());
+  const beatCountRef = useRef(0);
 
   useEffect(() => {
     const interval = setInterval(() => {
+      beatCountRef.current += 1;
+      // Accent every 4th beat (downbeat)
+      const isDownbeat = beatCountRef.current % 4 === 1;
+      playClick(isDownbeat);
       setFlash(true);
       lastFlash.current = Date.now();
       setTimeout(() => setFlash(false), 150);

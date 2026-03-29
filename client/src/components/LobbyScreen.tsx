@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import type { LobbyData } from '../types/game';
 
 interface Props {
@@ -7,10 +8,59 @@ interface Props {
   onAddCpu: () => void;
 }
 
+// Module-level flag shared with TiltChase so the in-game component skips its
+// own permission prompt when the lobby already handled it this session.
+export let lobbyMotionGranted = false;
+
 export function LobbyScreen({ lobby, playerId, onStartGame, onAddCpu }: Props) {
   const isHost = playerId === lobby.hostId;
   const players = lobby.players.filter((p) => p.role === 'player');
   const spectators = lobby.players.filter((p) => p.role === 'spectator');
+
+  // Motion permission for Tilt Chase — iOS 13+ requires requestPermission()
+  // to be called from a user-gesture handler, so we surface a button here in
+  // the lobby so players aren't caught off-guard mid-minigame.
+  const needsMotionPermission =
+    typeof (DeviceMotionEvent as any).requestPermission === 'function';
+  const [motionState, setMotionState] = useState<'idle' | 'requesting' | 'granted' | 'denied'>(
+    lobbyMotionGranted ? 'granted' : 'idle'
+  );
+
+  // On non-iOS, listen briefly to detect whether accelerometer data arrives.
+  useEffect(() => {
+    if (needsMotionPermission) return;
+    const handler = (e: DeviceMotionEvent) => {
+      const a = e.accelerationIncludingGravity;
+      if (a && (a.x !== null || a.y !== null)) {
+        lobbyMotionGranted = true;
+        setMotionState('granted');
+        window.removeEventListener('devicemotion', handler);
+      }
+    };
+    window.addEventListener('devicemotion', handler);
+    const t = setTimeout(() => window.removeEventListener('devicemotion', handler), 1500);
+    return () => { window.removeEventListener('devicemotion', handler); clearTimeout(t); };
+  }, [needsMotionPermission]);
+
+  const requestMotion = () => {
+    setMotionState('requesting');
+    (DeviceMotionEvent as any).requestPermission()
+      .then((state: string) => {
+        if (state === 'granted') {
+          lobbyMotionGranted = true;
+          setMotionState('granted');
+        } else {
+          setMotionState('denied');
+        }
+      })
+      .catch(() => setMotionState('denied'));
+  };
+
+  // Only show the prompt to players (not spectators), and only on iOS
+  const showMotionPrompt =
+    needsMotionPermission &&
+    motionState !== 'granted' &&
+    lobby.players.find((p) => p.id === playerId)?.role === 'player';
 
   return (
     <div style={styles.container}>
@@ -67,6 +117,28 @@ export function LobbyScreen({ lobby, playerId, onStartGame, onAddCpu }: Props) {
       <div style={styles.settings}>
         <span style={styles.settingLabel}>Target: {lobby.targetMarbles} marbles</span>
       </div>
+
+      {/* Motion permission banner — shown to iOS players before the game starts */}
+      {showMotionPrompt && (
+        <div style={styles.motionBanner}>
+          <span style={styles.motionIcon}>📱</span>
+          <div style={styles.motionText}>
+            <strong style={styles.motionTitle}>Enable Tilt Controls</strong>
+            <span style={styles.motionBody}>
+              Tilt Chase uses motion sensors. Tap to allow before the game starts.
+            </span>
+          </div>
+          <button
+            style={{
+              ...styles.motionBtn,
+              ...(motionState === 'requesting' ? styles.motionBtnDisabled : {}),
+            }}
+            onPointerDown={motionState === 'idle' ? requestMotion : undefined}
+          >
+            {motionState === 'requesting' ? '…' : motionState === 'denied' ? 'Denied' : 'Allow'}
+          </button>
+        </div>
+      )}
 
       {isHost && (
         <div style={styles.hostActions}>
@@ -249,4 +321,20 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '2px 8px',
     borderRadius: '10px',
   },
+  motionBanner: {
+    display: 'flex', alignItems: 'center', gap: '10px',
+    background: '#1a3a5c', borderRadius: '12px',
+    padding: '12px 14px', border: '1px solid #3498db',
+    marginBottom: '8px',
+  },
+  motionIcon: { fontSize: '22px', flexShrink: 0 },
+  motionText: { flex: 1, display: 'flex', flexDirection: 'column' as const, gap: '2px' },
+  motionTitle: { color: '#ccd6f6', fontSize: '14px' },
+  motionBody: { color: '#8892b0', fontSize: '12px' },
+  motionBtn: {
+    background: '#3498db', color: '#fff', border: 'none',
+    borderRadius: '8px', padding: '8px 16px',
+    fontSize: '14px', fontWeight: 700, cursor: 'pointer', flexShrink: 0,
+  },
+  motionBtnDisabled: { background: '#233554', color: '#5a6a8a', cursor: 'default' },
 };

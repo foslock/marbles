@@ -11,20 +11,26 @@ const LANES = 3;
 const W = 300;
 const H = 480;
 const PLAYER_Y = H - 80;           // px from top (centre of player)
-const OBSTACLE_SPEED = 8;           // px per tick (was 4 — doubled+)
-const SPAWN_INTERVAL = 550;         // ms between spawns (slightly faster)
+const BASE_SPEED = 7;               // px per tick at game start
+const SPEED_RAMP = 0.18;            // additional px/tick gained per second of play
+const MAX_SPEED = 22;               // cap so it stays humanly possible
+const BASE_SPAWN_MS = 520;          // initial spawn interval
+const MIN_SPAWN_MS = 260;           // fastest spawn interval
 const TICK_MS = 30;
-const HIT_WINDOW = 34;              // px distance from PLAYER_Y that counts as a hit
-const SWIPE_THRESHOLD = 28;         // px horizontal movement = swipe
+const HIT_WINDOW = 34;
+const SWIPE_THRESHOLD = 28;
 
 export function SwipeDodge({ onScoreUpdate }: MinigameComponentProps) {
   const [playerLane, setPlayerLane] = useState(1);
   const [obstacles, setObstacles] = useState<Obstacle[]>([]);
   const scoreRef = useRef(0);
   const nextId = useRef(0);
-  const frozenRef = useRef(false);          // brief freeze on hit
-  const playerLaneRef = useRef(1);          // mirror for use inside setObstacles
+  const frozenRef = useRef(false);
+  const playerLaneRef = useRef(1);
   const pointerStart = useRef<{ x: number; y: number; lane: number } | null>(null);
+  const startTimeRef = useRef(Date.now());
+  // Speed computed each tick from elapsed time
+  const currentSpeed = () => Math.min(MAX_SPEED, BASE_SPEED + ((Date.now() - startTimeRef.current) / 1000) * SPEED_RAMP);
 
   const moveTo = useCallback((lane: number) => {
     const l = Math.max(0, Math.min(LANES - 1, lane));
@@ -32,23 +38,32 @@ export function SwipeDodge({ onScoreUpdate }: MinigameComponentProps) {
     setPlayerLane(l);
   }, []);
 
-  // Spawn obstacles
+  // Spawn obstacles — interval tightens as speed increases
   useEffect(() => {
-    const interval = setInterval(() => {
-      if (frozenRef.current) return;
-      setObstacles((prev) => [
-        ...prev,
-        { id: nextId.current++, lane: Math.floor(Math.random() * LANES), y: -30 },
-      ]);
-    }, SPAWN_INTERVAL);
-    return () => clearInterval(interval);
+    let timeoutId: ReturnType<typeof setTimeout>;
+    const scheduleNext = () => {
+      const elapsed = (Date.now() - startTimeRef.current) / 1000;
+      const interval = Math.max(MIN_SPAWN_MS, BASE_SPAWN_MS - elapsed * 8);
+      timeoutId = setTimeout(() => {
+        if (!frozenRef.current) {
+          setObstacles((prev) => [
+            ...prev,
+            { id: nextId.current++, lane: Math.floor(Math.random() * LANES), y: -30 },
+          ]);
+        }
+        scheduleNext();
+      }, interval);
+    };
+    scheduleNext();
+    return () => clearTimeout(timeoutId);
   }, []);
 
-  // Game tick
+  // Game tick — speed increases over time
   useEffect(() => {
     const interval = setInterval(() => {
+      const speed = currentSpeed();
       setObstacles((prev) => {
-        const moved = prev.map((o) => ({ ...o, y: o.y + OBSTACLE_SPEED }));
+        const moved = prev.map((o) => ({ ...o, y: o.y + speed }));
 
         // Collision check
         if (!frozenRef.current) {

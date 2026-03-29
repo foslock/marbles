@@ -1,25 +1,25 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { MinigameComponentProps } from './types';
+import { lobbyMotionGranted } from '../LobbyScreen';
 
 /**
  * TiltChase: Guide your dot to follow a moving target using device accelerometer.
  * Falls back to touch/pointer control if accelerometer is unavailable.
  *
- * iOS 13+ requires the DeviceMotion permission to be requested inside a user
- * gesture handler (a tap), not inside useEffect. We show a prompt button first
- * so the permission dialog can fire from the tap event.
+ * iOS 13+ motion permission is requested in LobbyScreen so the player has
+ * already handled it before the minigame starts. If the lobby flag is set we
+ * skip the in-game prompt entirely.
  */
 export function TiltChase({ onScoreUpdate, config }: MinigameComponentProps) {
-  const [playerPos, setPlayerPos] = useState({ x: 150, y: 200 });
-  const [targetPos, setTargetPos] = useState({ x: 150, y: 200 });
-  // 'unknown' until we know; 'requesting' while iOS dialog is pending
-  const [accelState, setAccelState] = useState<'unknown' | 'requesting' | 'granted' | 'denied'>('unknown');
+  const [playerPos, setPlayerPos] = useState({ x: 150, y: 220 });
+  const [targetPos, setTargetPos] = useState({ x: 150, y: 220 });
+  const [accelState, setAccelState] = useState<'unknown' | 'requesting' | 'granted' | 'denied'>(
+    lobbyMotionGranted ? 'granted' : 'unknown'
+  );
   const scoreRef = useRef(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const accelRef = useRef({ x: 0, y: 0 });
-  const playerPosRef = useRef({ x: 150, y: 200 });
 
-  // Detect if permission API exists (iOS 13+)
   const needsPermission = typeof (DeviceMotionEvent as any).requestPermission === 'function';
 
   const startListening = useCallback(() => {
@@ -37,11 +37,10 @@ export function TiltChase({ onScoreUpdate, config }: MinigameComponentProps) {
     return handler;
   }, []);
 
-  // On non-iOS (Android etc.) just start listening immediately
+  // Non-iOS: start listening immediately
   useEffect(() => {
-    if (needsPermission) return; // wait for button tap
+    if (needsPermission) return;
     const handler = startListening();
-    // Give it 800ms to see if we actually get accelerometer data
     const timer = setTimeout(() => {
       setAccelState((prev) => prev === 'unknown' ? 'denied' : prev);
     }, 800);
@@ -51,29 +50,32 @@ export function TiltChase({ onScoreUpdate, config }: MinigameComponentProps) {
     };
   }, [needsPermission, startListening]);
 
-  // iOS permission request — must fire from a tap handler
+  // iOS: if permission was already granted in lobby, start listening immediately
+  useEffect(() => {
+    if (!needsPermission || !lobbyMotionGranted) return;
+    const handler = startListening();
+    return () => window.removeEventListener('devicemotion', handler);
+  }, [needsPermission, startListening]);
+
+  // iOS fallback: in-game request (only if lobby prompt was missed)
   const requestIOSPermission = useCallback(() => {
     setAccelState('requesting');
     (DeviceMotionEvent as any).requestPermission()
       .then((state: string) => {
-        if (state === 'granted') {
-          startListening();
-          setAccelState('granted');
-        } else {
-          setAccelState('denied');
-        }
+        if (state === 'granted') { startListening(); setAccelState('granted'); }
+        else { setAccelState('denied'); }
       })
       .catch(() => setAccelState('denied'));
   }, [startListening]);
 
-  // Move target around periodically
+  // Target moves every 1.4s
   useEffect(() => {
     const interval = setInterval(() => {
       setTargetPos({
-        x: 40 + Math.random() * 220,
-        y: 60 + Math.random() * 300,
+        x: 50 + Math.random() * 200,
+        y: 80 + Math.random() * 280,
       });
-    }, 1200);
+    }, 1400);
     return () => clearInterval(interval);
   }, []);
 
@@ -81,60 +83,53 @@ export function TiltChase({ onScoreUpdate, config }: MinigameComponentProps) {
   useEffect(() => {
     if (accelState !== 'granted') return;
     const interval = setInterval(() => {
-      setPlayerPos((prev) => {
-        const nx = Math.max(10, Math.min(290, prev.x + accelRef.current.x));
-        const ny = Math.max(10, Math.min(390, prev.y + accelRef.current.y));
-        const next = { x: nx, y: ny };
-        playerPosRef.current = next;
-        return next;
-      });
+      setPlayerPos((prev) => ({
+        x: Math.max(10, Math.min(290, prev.x + accelRef.current.x)),
+        y: Math.max(10, Math.min(430, prev.y + accelRef.current.y)),
+      }));
     }, 30);
     return () => clearInterval(interval);
   }, [accelState]);
 
-  // Scoring: check distance each tick
+  // Scoring: proximity-based each 100ms
   useEffect(() => {
     const interval = setInterval(() => {
       const dist = Math.hypot(playerPos.x - targetPos.x, playerPos.y - targetPos.y);
-      if (dist < 50) {
-        scoreRef.current += dist < 20 ? 3 : 1;
+      if (dist < 65) {
+        scoreRef.current += dist < 25 ? 3 : 1;
         onScoreUpdate(scoreRef.current);
       }
     }, 100);
     return () => clearInterval(interval);
   }, [playerPos, targetPos, onScoreUpdate]);
 
-  // Touch/pointer fallback for non-accelerometer mode
+  // Touch/pointer fallback
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
     if (accelState === 'granted') return;
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return;
-    const next = {
+    setPlayerPos({
       x: Math.max(10, Math.min(290, e.clientX - rect.left)),
-      y: Math.max(10, Math.min(390, e.clientY - rect.top)),
-    };
-    playerPosRef.current = next;
-    setPlayerPos(next);
+      y: Math.max(10, Math.min(430, e.clientY - rect.top)),
+    });
   }, [accelState]);
 
   const dist = Math.hypot(playerPos.x - targetPos.x, playerPos.y - targetPos.y);
-  const closeColor = dist < 20 ? '#2ecc71' : dist < 50 ? '#f39c12' : '#e74c3c';
+  const closeColor = dist < 25 ? '#2ecc71' : dist < 65 ? '#f39c12' : '#e74c3c';
 
-  // iOS: show permission prompt before starting
-  if (needsPermission && accelState !== 'granted' && accelState !== 'denied') {
+  // Show in-game permission prompt only if lobby was skipped and we still need it
+  if (needsPermission && !lobbyMotionGranted && accelState !== 'granted' && accelState !== 'denied') {
     return (
       <div style={styles.permContainer}>
-        <p style={styles.permTitle}>Tilt Chase</p>
-        <p style={styles.permBody}>This game uses your device's motion sensor to move your dot.</p>
+        <p style={styles.permTitle}>Motion Access Needed</p>
+        <p style={styles.permBody}>Tilt Chase uses your device's motion sensor.</p>
         <button
           style={styles.permBtn}
           onPointerDown={accelState !== 'requesting' ? requestIOSPermission : undefined}
         >
           {accelState === 'requesting' ? 'Requesting…' : 'Enable Tilt Controls'}
         </button>
-        <p style={styles.permSkip}>
-          (If denied, touch controls will be used instead)
-        </p>
+        <p style={styles.permSkip}>(Denied → touch controls used instead)</p>
       </div>
     );
   }
@@ -145,21 +140,21 @@ export function TiltChase({ onScoreUpdate, config }: MinigameComponentProps) {
       style={styles.container}
       onPointerMove={handlePointerMove}
     >
-      {/* Target */}
+      {/* Target — larger for easier following (70×70, radius 35) */}
       <div style={{
         ...styles.target,
-        left: targetPos.x - 20,
-        top: targetPos.y - 20,
-        transition: 'left 0.8s ease, top 0.8s ease',
+        left: targetPos.x - 35,
+        top: targetPos.y - 35,
+        transition: 'left 0.9s ease, top 0.9s ease',
       }} />
 
-      {/* Player */}
+      {/* Player dot */}
       <div style={{
         ...styles.player,
-        left: playerPos.x - 12,
-        top: playerPos.y - 12,
+        left: playerPos.x - 14,
+        top: playerPos.y - 14,
         borderColor: closeColor,
-        boxShadow: `0 0 ${dist < 50 ? 15 : 0}px ${closeColor}`,
+        boxShadow: `0 0 ${dist < 65 ? 18 : 0}px ${closeColor}`,
       }} />
 
       <span style={styles.scoreOverlay}>{scoreRef.current}</span>
@@ -175,12 +170,13 @@ const styles: Record<string, React.CSSProperties> = {
     flex: 1, width: '100%', position: 'relative',
     touchAction: 'none', overflow: 'hidden',
   },
+  // Larger target: 70×70 (was 40×40)
   target: {
-    position: 'absolute', width: '40px', height: '40px', borderRadius: '50%',
-    background: 'rgba(231, 76, 60, 0.3)', border: '3px dashed #e74c3c',
+    position: 'absolute', width: '70px', height: '70px', borderRadius: '50%',
+    background: 'rgba(231, 76, 60, 0.2)', border: '3px dashed #e74c3c',
   },
   player: {
-    position: 'absolute', width: '24px', height: '24px', borderRadius: '50%',
+    position: 'absolute', width: '28px', height: '28px', borderRadius: '50%',
     background: '#3498db', border: '3px solid #2ecc71',
     transition: 'border-color 0.2s, box-shadow 0.2s',
   },
@@ -197,18 +193,11 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center', justifyContent: 'center', gap: '16px',
     padding: '32px', boxSizing: 'border-box',
   },
-  permTitle: {
-    color: '#ccd6f6', fontSize: '26px', fontWeight: 800, margin: 0,
-  },
-  permBody: {
-    color: '#8892b0', fontSize: '15px', textAlign: 'center', margin: 0, maxWidth: '280px',
-  },
+  permTitle: { color: '#ccd6f6', fontSize: '24px', fontWeight: 800, margin: 0 },
+  permBody: { color: '#8892b0', fontSize: '15px', textAlign: 'center', margin: 0, maxWidth: '280px' },
   permBtn: {
     background: '#3498db', color: '#fff', border: 'none', borderRadius: '12px',
-    padding: '16px 32px', fontSize: '18px', fontWeight: 700, cursor: 'pointer',
-    touchAction: 'none',
+    padding: '16px 32px', fontSize: '18px', fontWeight: 700, cursor: 'pointer', touchAction: 'none',
   },
-  permSkip: {
-    color: '#5a6a8a', fontSize: '12px', textAlign: 'center', margin: 0,
-  },
+  permSkip: { color: '#5a6a8a', fontSize: '12px', textAlign: 'center', margin: 0 },
 };
