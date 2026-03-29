@@ -155,14 +155,14 @@ MINIGAMES = [
         "duration": 18000,
         "type": "color_drop",
     },
-    {
-        "id": "marble_runner",
-        "name": "Marble Runner",
-        "description": "Keep the marble rolling!",
-        "instructions": "Your marble rolls forward automatically. Swipe up to jump over ground spikes, swipe down to duck under ceiling bars. Hit a spike and it's game over — get as far as you can!",
-        "duration": 30000,
-        "type": "marble_runner",
-    },
+    # {
+    #     "id": "marble_runner",
+    #     "name": "Marble Runner",
+    #     "description": "Keep the marble rolling!",
+    #     "instructions": "Your marble rolls forward automatically. Swipe up to jump over ground spikes, swipe down to duck under ceiling bars. Hit a spike and it's game over — get as far as you can!",
+    #     "duration": 30000,
+    #     "type": "marble_runner",
+    # },
     {
         "id": "pump_it",
         "name": "Pump It",
