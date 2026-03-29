@@ -109,6 +109,7 @@ export default function App() {
           moveAnimation={socket.moveAnimation}
           tileSwapAnimation={socket.tileSwapAnimation}
           activityFeed={socket.activityFeed}
+          onAddActivityItem={socket.addActivityItem}
           onRollDice={socket.rollDice}
           onChooseMove={socket.chooseMove}
           onMakeChoice={socket.makeChoice}

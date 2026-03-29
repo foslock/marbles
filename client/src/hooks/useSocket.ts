@@ -139,15 +139,8 @@ export function useSocket() {
 
     socket.on('tile_effect', (data: TileEffect) => {
       // Board updates are now deferred — they arrive via tile_swap at end of turn
+      // Activity item is added by GameScreen after movement animation completes
       setTileEffect(data);
-      if (data.message && !data.requiresChoice) {
-        const color: ActivityItem['color'] =
-          data.color === 'green' ? 'green' : data.color === 'red' ? 'red' : 'neutral';
-        setActivityFeed((prev) => [
-          ...prev,
-          { id: `te-${Date.now()}-${Math.random()}`, message: `${data.playerName}: ${data.message}`, color, timestamp: Date.now() },
-        ]);
-      }
     });
 
     socket.on('tile_swap', (data: { sourceTileId: number; targetTileId: number | null; color: string; boardUpdates: { id: number; color: 'green' | 'red' | 'neutral'; category: string; effect: string }[] }) => {
@@ -338,6 +331,12 @@ export function useSocket() {
     moveAnimation,
     tileSwapAnimation,
     activityFeed,
+    addActivityItem: (message: string, color: ActivityItem['color']) => {
+      setActivityFeed((prev) => [
+        ...prev,
+        { id: `te-${Date.now()}-${Math.random()}`, message, color, timestamp: Date.now() },
+      ]);
+    },
     createSession,
     joinSession,
     startGame,

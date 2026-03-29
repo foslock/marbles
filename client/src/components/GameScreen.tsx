@@ -10,7 +10,6 @@ import { GameBoard, type MoveAnimation, type TileSwapAnimation } from './GameBoa
 import { DiceRoller } from './DiceRoller';
 import { TileEffectOverlay } from './TileEffectOverlay';
 import { MinigameResultsOverlay } from './MinigameResultsOverlay';
-import { PlayerHUD } from './PlayerHUD';
 import { Scoreboard } from './Scoreboard';
 import { ActivityFeed } from './ActivityFeed';
 
@@ -24,6 +23,7 @@ interface Props {
   moveAnimation: MoveAnimation | null;
   tileSwapAnimation: TileSwapAnimation | null;
   activityFeed: ActivityItem[];
+  onAddActivityItem: (message: string, color: ActivityItem['color']) => void;
   onRollDice: (useReroll?: boolean) => void;
   onChooseMove: (tileId: number, path?: number[]) => void;
   onMakeChoice: (choiceType: string, targetId: string, amount?: number) => void;
@@ -45,6 +45,7 @@ export function GameScreen({
   moveAnimation,
   tileSwapAnimation,
   activityFeed,
+  onAddActivityItem,
   onRollDice,
   onChooseMove,
   onMakeChoice,
@@ -91,6 +92,15 @@ export function GameScreen({
     // Every client sends this; the server ignores duplicates via _pending_turn_player_id.
     onTurnComplete();
   }, [onClearTileEffect, onTurnComplete]);
+
+  // ── Activity item for tile effects (posted after movement completes) ─────
+  useEffect(() => {
+    if (effectToShow && effectToShow.message && !effectToShow.requiresChoice) {
+      const color: ActivityItem['color'] =
+        effectToShow.color === 'green' ? 'green' : effectToShow.color === 'red' ? 'red' : 'neutral';
+      onAddActivityItem(`${effectToShow.playerName}: ${effectToShow.message}`, color);
+    }
+  }, [effectToShow]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Delayed turn transition ──────────────────────────────────────────────
   // Keep the board centred on the current player and freeze the top-bar /
@@ -144,6 +154,15 @@ export function GameScreen({
               : ''}
           </span>
         </div>
+        {myPlayer && myPlayer.role === 'player' && (
+          <div style={styles.myScore}>
+            <span style={styles.myScoreMarbles}>{myPlayer.marbles}</span>
+            <span style={styles.myScoreLabel}>marbles</span>
+            <span style={styles.myScoreDivider}>|</span>
+            <span style={styles.myScorePoints}>{myPlayer.points}</span>
+            <span style={styles.myScoreLabel}>pts</span>
+          </div>
+        )}
         <button
           style={styles.scoreboardBtn}
           onClick={() => setShowScoreboard(!showScoreboard)}
@@ -198,11 +217,6 @@ export function GameScreen({
           </div>
         )}
       </div>
-
-      {/* Player HUD at bottom */}
-      {myPlayer && myPlayer.role === 'player' && (
-        <PlayerHUD player={myPlayer} />
-      )}
 
       {/* Thin status strip — only non-dice messages; fixed height so layout never shifts */}
       <div style={styles.actionArea}>
@@ -293,6 +307,30 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '15px',
     fontWeight: 600,
     color: '#ccd6f6',
+  },
+  myScore: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
+  },
+  myScoreMarbles: {
+    color: '#f39c12',
+    fontSize: '16px',
+    fontWeight: 700,
+  },
+  myScorePoints: {
+    color: '#ccd6f6',
+    fontSize: '14px',
+    fontWeight: 600,
+  },
+  myScoreLabel: {
+    color: '#8892b0',
+    fontSize: '10px',
+  },
+  myScoreDivider: {
+    color: '#233554',
+    fontSize: '12px',
+    margin: '0 2px',
   },
   scoreboardBtn: {
     padding: '6px 14px',
