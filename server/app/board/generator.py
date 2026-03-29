@@ -106,6 +106,7 @@ class TileData:
     neighbors: list[int] = field(default_factory=list)
     is_fork: bool = False
     is_merge: bool = False
+    is_revealed: bool = False
 
 
 @dataclass
