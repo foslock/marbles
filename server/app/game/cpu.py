@@ -93,6 +93,11 @@ async def run_cpu_turn(sio, session, player, get_reachable_fn, check_battle_fn):
         room=session.id,
     )
 
+    # Give clients time to register and start the move animation before the
+    # tile-effect popup arrives.  The animation itself takes ~350 ms per tile,
+    # so 0.5 s ensures even a 1-tile hop is partially visible first.
+    await asyncio.sleep(0.5)
+
     # ── Process tile effect ──────────────────────────────────────────────────
     effect_result = process_tile_effect(session, player)
 

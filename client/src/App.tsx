@@ -89,6 +89,9 @@ export default function App() {
           minigameResults={socket.minigameResults}
           moveAnimation={socket.moveAnimation}
           onClearMoveAnimation={socket.clearMoveAnimation}
+          onClearTileEffect={socket.clearTileEffect}
+          onClearBattleResult={socket.clearBattleResult}
+          onClearMinigameResults={socket.clearMinigameResults}
         />
       )}
 

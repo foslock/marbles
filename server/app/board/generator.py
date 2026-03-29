@@ -344,30 +344,51 @@ def _generate_alt_route_positions(
     count: int,
     main_positions: list[tuple[float, float]],
 ) -> list[tuple[float, float]]:
+    """Place alternate-route tiles along a cubic Bézier that departs and
+    arrives at 85–95° from the fork→merge chord.  This ensures the alt path
+    swings clearly away from the main loop, preventing tile overlaps.
+    """
     sx, sy = start_pos
     ex, ey = end_pos
     mx, my = (sx + ex) / 2, (sy + ey) / 2
     dx, dy = ex - sx, ey - sy
     length = math.hypot(dx, dy) or 1.0
+
+    # Perpendicular to the chord (the "outward" direction)
     nx, ny = -dy / length, dx / length
 
+    # Ensure the perpendicular points away from the main-loop centroid
     cx = sum(p[0] for p in main_positions) / len(main_positions)
     cy = sum(p[1] for p in main_positions) / len(main_positions)
     dot = (cx - mx) * nx + (cy - my) * ny
     if dot > 0:
         nx, ny = -nx, -ny
 
-    bulge = length * 0.35 + random.uniform(15, 40)
+    # Random tilt ±5° around the perpendicular so departure angle is 85–95°
+    # from the chord direction (nearly a right angle, with slight variation).
+    tilt = math.radians(random.uniform(-5.0, 5.0))
+    dep_x = nx * math.cos(tilt) - ny * math.sin(tilt)
+    dep_y = nx * math.sin(tilt) + ny * math.cos(tilt)
+
+    # Control-arm length: governs how far the tangent extends from each
+    # endpoint.  A larger value pushes tiles further from the main loop.
+    bulge = length * 0.55 + random.uniform(25, 55)
+
+    # Cubic Bézier control points:
+    #   P0 = fork tile,  P1 = fork + outward tangent
+    #   P3 = merge tile, P2 = merge + outward tangent (symmetric)
+    p0 = (sx, sy)
+    p1 = (sx + dep_x * bulge, sy + dep_y * bulge)
+    p2 = (ex + dep_x * bulge, ey + dep_y * bulge)
+    p3 = (ex, ey)
 
     positions = []
     for i in range(count):
-        frac = (i + 1) / (count + 1)
-        lx = sx + frac * (ex - sx)
-        ly = sy + frac * (ey - sy)
-        offset = bulge * math.sin(math.pi * frac)
-        lx += nx * offset
-        ly += ny * offset
-        positions.append((lx, ly))
+        t = (i + 1) / (count + 1)
+        u = 1.0 - t
+        bx = u**3 * p0[0] + 3*u**2*t * p1[0] + 3*u*t**2 * p2[0] + t**3 * p3[0]
+        by = u**3 * p0[1] + 3*u**2*t * p1[1] + 3*u*t**2 * p2[1] + t**3 * p3[1]
+        positions.append((bx, by))
 
     return positions
 

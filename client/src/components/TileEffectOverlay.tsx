@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import type { TileEffect } from '../types/game';
+import type { Token } from '../types/game';
 import { SFX } from '../utils/sound';
 import { Haptics } from '../utils/haptics';
 
 interface Props {
   effect: TileEffect;
+  playerToken?: Token | null;
   onClose: () => void;
 }
 
@@ -31,7 +33,7 @@ const EFFECT_ICONS: Record<string, string> = {
 
 const MIN_DISPLAY_MS = 3000;
 
-export function TileEffectOverlay({ effect, onClose }: Props) {
+export function TileEffectOverlay({ effect, playerToken, onClose }: Props) {
   const [visible, setVisible] = useState(false);
   const [canDismiss, setCanDismiss] = useState(false);
   const onCloseRef = useRef(onClose);
@@ -80,16 +82,32 @@ export function TileEffectOverlay({ effect, onClose }: Props) {
   return (
     <div style={styles.overlay} onClick={canDismiss ? onClose : undefined}>
       <div
-        className="animate-bounce-in"
         style={{
           ...styles.card,
           borderColor,
           boxShadow: `0 0 40px ${glowColor}, 0 0 80px ${glowColor}`,
           opacity: visible ? 1 : 0,
-          transform: visible ? 'scale(1)' : 'scale(0.5)',
-          transition: 'opacity 0.3s ease-out, transform 0.3s ease-out',
+          transform: visible ? 'translateY(0) scale(1)' : 'translateY(16px) scale(0.94)',
+          transition: 'opacity 0.45s ease-out, transform 0.45s ease-out',
         }}
       >
+        {/* Player header */}
+        <div style={styles.playerHeader}>
+          {playerToken && (
+            <div
+              style={{
+                ...styles.tokenBadge,
+                background: playerToken.color || '#233554',
+              }}
+            >
+              <span style={styles.tokenEmoji}>{playerToken.emoji}</span>
+            </div>
+          )}
+          <span style={styles.playerName}>{effect.playerName}</span>
+        </div>
+
+        <div style={styles.divider} />
+
         <div style={styles.iconContainer}>
           <span style={styles.icon}>{icon}</span>
         </div>
@@ -125,11 +143,42 @@ const styles: Record<string, React.CSSProperties> = {
   card: {
     background: '#112240',
     borderRadius: '16px',
-    padding: '24px',
+    padding: '20px 24px 24px',
     maxWidth: '300px',
     width: '100%',
     textAlign: 'center',
     border: '3px solid',
+  },
+  playerHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '10px',
+    marginBottom: '12px',
+  },
+  tokenBadge: {
+    width: '32px',
+    height: '32px',
+    borderRadius: '50%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  tokenEmoji: {
+    fontSize: '18px',
+    lineHeight: 1,
+  },
+  playerName: {
+    color: '#ccd6f6',
+    fontSize: '16px',
+    fontWeight: 700,
+    letterSpacing: '0.5px',
+  },
+  divider: {
+    height: '1px',
+    background: '#1e3a5f',
+    marginBottom: '14px',
   },
   iconContainer: {
     marginBottom: '12px',
@@ -137,7 +186,6 @@ const styles: Record<string, React.CSSProperties> = {
   icon: {
     fontSize: '48px',
     display: 'inline-block',
-    animation: 'bounceIn 0.5s ease-out',
   },
   blocked: {
     color: '#3498db',

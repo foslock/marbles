@@ -37,6 +37,11 @@ const EDGE_COLOR = '#1a3a5c';
 // How much to zoom in on the player's tile
 const PLAYER_ZOOM = 2.5;
 
+// ms per path segment during movement
+const MOVE_SPEED = 350;
+// ms for the landing ring animation after token arrives
+const LANDING_DURATION = 800;
+
 export function GameBoard({ board, players, reachableTiles, onTileClick, moveAnimation, onAnimationComplete, myPlayerId, activePlayerId }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -44,13 +49,20 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
   const [scale, setScale] = useState(PLAYER_ZOOM);
   const dragRef = useRef({ dragging: false, startX: 0, startY: 0, offsetX: 0, offsetY: 0 });
 
-  // Animation state
+  // Movement animation state
   const animRef = useRef<{
     playerId: string;
     path: { x: number; y: number }[];
     progress: number;
     startTime: number;
   } | null>(null);
+
+  // Landing ring animation state (runs after movement ends)
+  const landingRef = useRef<{
+    tileId: number;
+    startTime: number;
+  } | null>(null);
+
   const rafRef = useRef<number>(0);
 
   const reachableSet = new Set(reachableTiles.map((r) => r.tileId));
@@ -97,7 +109,6 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
   }, [board?.width]); // only on initial board load (width is stable after generation)
 
   // Follow the active player when the turn changes.
-  // If it's our turn, re-center on ourselves; otherwise pan to the active player.
   useEffect(() => {
     if (!board || !activePlayerId) return;
     if (activePlayerId === myPlayerId) {
@@ -219,7 +230,7 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
       }
     }
 
-    // Draw player tokens
+    // Draw player tokens (skip the actively-moving player — shown at interpolated position)
     const tilePlayerMap: Record<number, PlayerState[]> = {};
     const animating = animRef.current;
     for (const p of players) {
@@ -260,6 +271,49 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
       }
     }
 
+    // Draw landing ring animation
+    const landing = landingRef.current;
+    if (landing) {
+      const tile = board.tiles[String(landing.tileId)];
+      if (tile) {
+        const elapsed = performance.now() - landing.startTime;
+        const t = Math.min(elapsed / LANDING_DURATION, 1);
+
+        const tileRgb =
+          tile.color === 'green' ? '39, 174, 96' :
+          tile.color === 'red'   ? '231, 76, 60' :
+                                   '243, 156, 18';
+
+        // Outer expanding ring
+        const outerRadius = 14 + 28 * t;
+        ctx.beginPath();
+        ctx.arc(tile.x, tile.y, outerRadius, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(${tileRgb}, ${(1 - t) * 0.9})`;
+        ctx.lineWidth = 3;
+        ctx.stroke();
+
+        // Second ring, slightly delayed and smaller
+        if (t > 0.15) {
+          const t2 = (t - 0.15) / 0.85;
+          const radius2 = 14 + 18 * t2;
+          ctx.beginPath();
+          ctx.arc(tile.x, tile.y, radius2, 0, Math.PI * 2);
+          ctx.strokeStyle = `rgba(${tileRgb}, ${(1 - t2) * 0.55})`;
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
+
+        // Quick inner flash that fades out fast
+        if (t < 0.35) {
+          const innerT = t / 0.35;
+          ctx.beginPath();
+          ctx.arc(tile.x, tile.y, INNER_CIRCLE_R + 4, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(${tileRgb}, ${(1 - innerT) * 0.35})`;
+          ctx.fill();
+        }
+      }
+    }
+
     ctx.restore();
   }, [board, players, reachableSet, offset, scale]);
 
@@ -283,7 +337,7 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
     };
   }, [draw, reachableTiles.length]);
 
-  // Move animation
+  // Move animation (includes landing ring phase before calling onAnimationComplete)
   useEffect(() => {
     if (!moveAnimation || !board) return;
     const pathCoords = moveAnimation.path
@@ -299,17 +353,43 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
       progress: 0,
       startTime: performance.now(),
     };
+    landingRef.current = null;
 
-    const SPEED = 200;
-    const totalDuration = (pathCoords.length - 1) * SPEED;
+    const totalDuration = (pathCoords.length - 1) * MOVE_SPEED;
     let lastHop = -1;
 
     const tick = (now: number) => {
-      const anim = animRef.current;
-      if (!anim) return;
+      // ── Landing phase ────────────────────────────────────────────────────
+      if (!animRef.current) {
+        const landing = landingRef.current;
+        if (!landing) return;
+        const landingElapsed = now - landing.startTime;
+        draw();
+        if (landingElapsed >= LANDING_DURATION) {
+          landingRef.current = null;
+          draw();
+          // Re-centre on destination
+          const lastTileId = moveAnimation.path[moveAnimation.path.length - 1];
+          const destTile = board.tiles[String(lastTileId)];
+          if (destTile) {
+            if (
+              moveAnimation.playerId === myPlayerId ||
+              moveAnimation.playerId === activePlayerId
+            ) {
+              centerOnTile(destTile.x, destTile.y, PLAYER_ZOOM);
+            }
+          }
+          onAnimationComplete?.();
+        } else {
+          rafRef.current = requestAnimationFrame(tick);
+        }
+        return;
+      }
 
+      // ── Movement phase ───────────────────────────────────────────────────
+      const anim = animRef.current;
       const elapsed = now - anim.startTime;
-      anim.progress = Math.min(elapsed / SPEED, pathCoords.length - 1);
+      anim.progress = Math.min(elapsed / MOVE_SPEED, pathCoords.length - 1);
 
       const currentHop = Math.floor(anim.progress);
       if (currentHop > lastHop) {
@@ -323,17 +403,12 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
         SFX.tileLand();
         Haptics.medium();
         animRef.current = null;
-        draw();
-        onAnimationComplete?.();
-        // Re-centre on whichever player just moved (us or the active opponent)
+
+        // Kick off landing ring
         const lastTileId = moveAnimation.path[moveAnimation.path.length - 1];
-        const destTile = board.tiles[String(lastTileId)];
-        if (destTile) {
-          if (moveAnimation.playerId === myPlayerId ||
-              moveAnimation.playerId === activePlayerId) {
-            centerOnTile(destTile.x, destTile.y, PLAYER_ZOOM);
-          }
-        }
+        landingRef.current = { tileId: lastTileId, startTime: now };
+        draw();
+        rafRef.current = requestAnimationFrame(tick);
         return;
       }
 
@@ -345,6 +420,7 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       animRef.current = null;
+      landingRef.current = null;
     };
   }, [moveAnimation, board, draw, onAnimationComplete, myPlayerId, activePlayerId, centerOnTile]);
 

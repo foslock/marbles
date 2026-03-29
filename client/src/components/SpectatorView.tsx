@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useEffect } from 'react';
 import type { GameState, MinigameResults, BattleResult, TileEffect } from '../types/game';
 import { GameBoard, type MoveAnimation } from './GameBoard';
 
@@ -9,6 +9,9 @@ interface Props {
   minigameResults: MinigameResults | null;
   moveAnimation: MoveAnimation | null;
   onClearMoveAnimation: () => void;
+  onClearTileEffect: () => void;
+  onClearBattleResult: () => void;
+  onClearMinigameResults: () => void;
 }
 
 /**
@@ -16,7 +19,17 @@ interface Props {
  * Shows the board prominently with a persistent sidebar scoreboard.
  * Designed to be displayed via AirPlay/Chromecast on a shared screen.
  */
-export function SpectatorView({ gameState, tileEffect, battleResult, minigameResults, moveAnimation, onClearMoveAnimation }: Props) {
+export function SpectatorView({
+  gameState,
+  tileEffect,
+  battleResult,
+  minigameResults,
+  moveAnimation,
+  onClearMoveAnimation,
+  onClearTileEffect,
+  onClearBattleResult,
+  onClearMinigameResults,
+}: Props) {
   const sortedPlayers = useMemo(() => {
     return Object.values(gameState.players)
       .filter((p) => p.role === 'player')
@@ -29,6 +42,25 @@ export function SpectatorView({ gameState, tileEffect, battleResult, minigameRes
   const currentPlayer = gameState.currentTurnPlayerId
     ? gameState.players[gameState.currentTurnPlayerId]
     : null;
+
+  // Auto-dismiss overlays so they never get permanently stuck
+  useEffect(() => {
+    if (!tileEffect) return;
+    const timer = setTimeout(onClearTileEffect, 6000);
+    return () => clearTimeout(timer);
+  }, [tileEffect, onClearTileEffect]);
+
+  useEffect(() => {
+    if (!battleResult) return;
+    const timer = setTimeout(onClearBattleResult, 5000);
+    return () => clearTimeout(timer);
+  }, [battleResult, onClearBattleResult]);
+
+  useEffect(() => {
+    if (!minigameResults) return;
+    const timer = setTimeout(onClearMinigameResults, 8000);
+    return () => clearTimeout(timer);
+  }, [minigameResults, onClearMinigameResults]);
 
   return (
     <div style={styles.container}>

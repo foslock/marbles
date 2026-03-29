@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import type {
   GameState,
   DiceResult,
@@ -52,14 +52,76 @@ export function GameScreen({
   onEndGame,
 }: Props) {
   const [showScoreboard, setShowScoreboard] = useState(false);
-  const isMyTurn = gameState.currentTurnPlayerId === playerId;
+
+  // ── Tile effect buffering ────────────────────────────────────────────────
+  // Hold incoming tile effects until the move animation + landing completes,
+  // so the popup never appears while the token is still flying.
+  const effectPendingRef = useRef<TileEffect | null>(null);
+  const [effectToShow, setEffectToShow] = useState<TileEffect | null>(null);
+
+  useEffect(() => {
+    if (!tileEffect) {
+      effectPendingRef.current = null;
+      setEffectToShow(null);
+      return;
+    }
+    // If animation is running, buffer; otherwise show immediately.
+    if (moveAnimation) {
+      effectPendingRef.current = tileEffect;
+    } else {
+      setEffectToShow(tileEffect);
+    }
+  }, [tileEffect]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleAnimationComplete = useCallback(() => {
+    onClearMoveAnimation();
+    if (effectPendingRef.current) {
+      setEffectToShow(effectPendingRef.current);
+      effectPendingRef.current = null;
+    }
+  }, [onClearMoveAnimation]);
+
+  const handleClearEffectToShow = useCallback(() => {
+    setEffectToShow(null);
+    onClearTileEffect();
+  }, [onClearTileEffect]);
+
+  // ── Delayed turn transition ──────────────────────────────────────────────
+  // Keep the board centred on the current player and show their name in the
+  // top bar until ALL overlays are dismissed, so the view doesn't jump away
+  // while anyone is still reading a tile-effect / battle / minigame popup.
+  const [displayedTurnPlayerId, setDisplayedTurnPlayerId] = useState(
+    gameState.currentTurnPlayerId,
+  );
+
+  useEffect(() => {
+    if (!effectToShow && !battleResult && !minigameResults) {
+      setDisplayedTurnPlayerId(gameState.currentTurnPlayerId);
+    }
+  }, [gameState.currentTurnPlayerId, effectToShow, battleResult, minigameResults]);
+
+  // Also flush when each overlay is individually dismissed
+  const handleClearBattleResult = useCallback(() => {
+    onClearBattleResult();
+    // The useEffect above will fire next render to sync displayedTurnPlayerId
+  }, [onClearBattleResult]);
+
+  const handleClearMinigameResults = useCallback(() => {
+    onClearMinigameResults();
+  }, [onClearMinigameResults]);
+
+  // ── Derived values ───────────────────────────────────────────────────────
   const myPlayer = playerId ? gameState.players[playerId] : null;
   const isSpectator = myPlayer?.role === 'spectator';
-  const currentTurnPlayer = gameState.currentTurnPlayerId
-    ? gameState.players[gameState.currentTurnPlayerId]
+
+  // Use the visually-displayed turn player (frozen while overlay is open)
+  const isMyTurn = displayedTurnPlayerId === playerId;
+  const currentTurnPlayer = displayedTurnPlayerId
+    ? gameState.players[displayedTurnPlayerId]
     : null;
 
-  const needsToChooseMove = diceResult && diceResult.playerId === playerId && diceResult.reachableTiles.length > 0;
+  const needsToChooseMove =
+    diceResult && diceResult.playerId === playerId && diceResult.reachableTiles.length > 0;
 
   const handleChooseMove = (tileId: number) => {
     const tile = diceResult?.reachableTiles.find((t) => t.tileId === tileId);
@@ -71,6 +133,11 @@ export function GameScreen({
       .filter((p) => p.role === 'player')
       .sort((a, b) => (a.turnOrder ?? 0) - (b.turnOrder ?? 0));
   }, [gameState.players]);
+
+  // Look up the token for whoever's tile effect is being shown
+  const effectPlayerToken = effectToShow
+    ? (gameState.players[effectToShow.playerId]?.token ?? null)
+    : null;
 
   return (
     <div style={styles.container}>
@@ -109,9 +176,9 @@ export function GameScreen({
             reachableTiles={needsToChooseMove ? diceResult.reachableTiles : []}
             onTileClick={needsToChooseMove ? handleChooseMove : undefined}
             moveAnimation={moveAnimation}
-            onAnimationComplete={onClearMoveAnimation}
+            onAnimationComplete={handleAnimationComplete}
             myPlayerId={playerId}
-            activePlayerId={gameState.currentTurnPlayerId}
+            activePlayerId={displayedTurnPlayerId}
           />
         )}
       </div>
@@ -123,7 +190,7 @@ export function GameScreen({
 
       {/* Action area */}
       <div style={styles.actionArea}>
-        {isMyTurn && !tileEffect && !battleResult && (
+        {isMyTurn && !effectToShow && !battleResult && (
           <DiceRoller
             onRoll={onRollDice}
             hasRerolls={(myPlayer?.modifiers.rerolls ?? 0) > 0}
@@ -133,7 +200,7 @@ export function GameScreen({
           />
         )}
 
-        {!isMyTurn && !isSpectator && !tileEffect && !battleResult && (
+        {!isMyTurn && !isSpectator && !effectToShow && !battleResult && (
           <p style={styles.waitText}>
             Waiting for {currentTurnPlayer?.name || 'someone'}...
           </p>
@@ -177,16 +244,20 @@ export function GameScreen({
       )}
 
       {/* Effect overlays */}
-      {tileEffect && (
-        <TileEffectOverlay effect={tileEffect} onClose={onClearTileEffect} />
+      {effectToShow && (
+        <TileEffectOverlay
+          effect={effectToShow}
+          playerToken={effectPlayerToken}
+          onClose={handleClearEffectToShow}
+        />
       )}
       {battleResult && (
-        <BattleOverlay result={battleResult} onClose={onClearBattleResult} />
+        <BattleOverlay result={battleResult} onClose={handleClearBattleResult} />
       )}
       {minigameResults && (
         <MinigameResultsOverlay
           results={minigameResults}
-          onClose={onClearMinigameResults}
+          onClose={handleClearMinigameResults}
         />
       )}
     </div>
