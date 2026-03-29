@@ -217,9 +217,11 @@ export function DiceOverlay({
         d.angle += 0.03;
       }
 
-      // ── Fire settled callback after hold ─────────────────────────────────
+      // ── Fire settled callback after hold + fade ───────────────────────────
+      // Wait until the die has fully faded before signaling settled, so
+      // zoom / tile highlights / movement don't start while die is visible.
       if (phaseRef.current === 'landed' && landedAtRef.current > 0 && !settledFiredRef.current) {
-        if (now - landedAtRef.current >= LAND_HOLD_MS) {
+        if (now - landedAtRef.current >= LAND_HOLD_MS + FADE_DURATION) {
           settledFiredRef.current = true;
           onDiceSettledRef.current?.();
         }
