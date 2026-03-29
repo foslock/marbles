@@ -397,6 +397,7 @@ async def choose_move(sid, data):
     # Store pending swap tile for end-of-turn processing
     session._pending_swap_tile_id = target_tile
     session._pending_turn_player_id = player_id
+    session._pending_turn_action = "swap_and_check"
 
     # If effect requires a choice, wait for it (then turn_complete after choice)
     if effect_result.get("requiresChoice"):
@@ -448,7 +449,6 @@ async def turn_complete(sid, data):
     if not session or session.state != "playing":
         return
 
-    # Only the current turn player (or any client for that player) can complete
     pending_player_id = getattr(session, "_pending_turn_player_id", None)
     if not pending_player_id:
         return  # No pending turn completion
@@ -457,14 +457,21 @@ async def turn_complete(sid, data):
     if not player:
         return
 
+    action = getattr(session, "_pending_turn_action", None)
+
     # Clear pending state
     session._pending_turn_player_id = None
+    session._pending_turn_action = None
 
-    # Perform deferred tile swap and emit animation
-    await _perform_tile_swap(session, pending_player_id)
-
-    # Check for battles and end turn
-    await _check_battle_and_end_turn(session, player)
+    if action == "swap_and_check":
+        # After tile effect dismissed: perform swap, then check for battle
+        await _perform_tile_swap(session, pending_player_id)
+        await _check_battle_and_end_turn(session, player)
+    elif action == "advance":
+        # After minigame results dismissed: just advance the turn
+        _end_turn(session)
+        await _send_turn_update(session)
+        await _persist_session(session)
 
 
 @sio.event
@@ -515,9 +522,9 @@ async def submit_minigame_score(sid, data):
         session._minigame_participants = []
         session._minigame_bonus = False
 
-        # End turn
-        _end_turn(session)
-        await _send_turn_update(session)
+        # Don't advance turn yet — wait for client to dismiss results overlay
+        session._pending_turn_player_id = session.current_turn_player_id
+        session._pending_turn_action = "advance"
 
 
 async def _perform_tile_swap(session, player_id):
@@ -591,8 +598,21 @@ async def _check_battle_and_end_turn(session, player):
             session._minigame_scores = {}
             session._minigame_participants = []
             session._minigame_bonus = False
-            _end_turn(session)
-            await _send_turn_update(session)
+
+            # Check if any human players are in the session to dismiss results
+            has_human = any(
+                not p.is_cpu and p.role == "player"
+                for p in session.players.values()
+            )
+            if has_human:
+                # Wait for a human client to dismiss the results overlay
+                session._pending_turn_player_id = session.current_turn_player_id
+                session._pending_turn_action = "advance"
+            else:
+                # All-CPU game: auto-advance after a delay
+                await asyncio.sleep(3.0)
+                _end_turn(session)
+                await _send_turn_update(session)
 
         return  # Turn ends after minigame completes
 

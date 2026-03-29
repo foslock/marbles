@@ -93,6 +93,7 @@ export default function App() {
           onClearTileEffect={socket.clearTileEffect}
           onClearMinigameResults={socket.clearMinigameResults}
           onClearTileSwapAnimation={socket.clearTileSwapAnimation}
+          onTurnComplete={socket.turnComplete}
         />
       )}
 

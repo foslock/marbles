@@ -107,9 +107,10 @@ async def run_cpu_turn(sio, session, player, get_reachable_fn, check_battle_fn):
         room=session.id,
     )
 
-    # Store pending swap info
+    # Store pending swap tile but NOT _pending_turn_player_id — CPU handles
+    # its own turn flow, so we don't want turn_complete from human clients
+    # to interfere.
     session._pending_swap_tile_id = chosen["tileId"]
-    session._pending_turn_player_id = player.id
 
     # ── Handle effects that need a choice ────────────────────────────────────
     if effect_result.get("requiresChoice"):

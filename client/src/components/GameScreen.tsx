@@ -253,7 +253,10 @@ export function GameScreen({
       {minigameResults && (
         <MinigameResultsOverlay
           results={minigameResults}
-          onClose={onClearMinigameResults}
+          onClose={() => {
+            onClearMinigameResults();
+            onTurnComplete();
+          }}
         />
       )}
     </div>

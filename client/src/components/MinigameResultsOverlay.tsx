@@ -9,18 +9,31 @@ interface Props {
 const PODIUM_COLORS = ['#f39c12', '#bdc3c7', '#cd7f32'];
 const PODIUM_LABELS = ['1st', '2nd', '3rd'];
 const DISMISS_DELAY_MS = 3000;
+const AUTO_DISMISS_MS = 10000;
 
 export function MinigameResultsOverlay({ results, onClose }: Props) {
   const [canDismiss, setCanDismiss] = useState(false);
+  const [progress, setProgress] = useState(0);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
 
   useEffect(() => {
     const unlockTimer = setTimeout(() => setCanDismiss(true), DISMISS_DELAY_MS);
-    const autoTimer = setTimeout(() => onCloseRef.current(), 5000);
+    const autoTimer = setTimeout(() => onCloseRef.current(), AUTO_DISMISS_MS);
+
+    // Animate progress bar
+    const start = Date.now();
+    const tick = () => {
+      const elapsed = Date.now() - start;
+      setProgress(Math.min(elapsed / AUTO_DISMISS_MS, 1));
+      if (elapsed < AUTO_DISMISS_MS) rafId = requestAnimationFrame(tick);
+    };
+    let rafId = requestAnimationFrame(tick);
+
     return () => {
       clearTimeout(unlockTimer);
       clearTimeout(autoTimer);
+      cancelAnimationFrame(rafId);
     };
   }, []);
 
@@ -68,7 +81,10 @@ export function MinigameResultsOverlay({ results, onClose }: Props) {
           </div>
         )}
 
-        <span style={styles.tap}>{canDismiss ? 'Tap to continue' : '…'}</span>
+        <span style={styles.tap}>{canDismiss ? 'Tap to continue' : '...'}</span>
+        <div style={styles.progressTrack}>
+          <div style={{ ...styles.progressFill, width: `${progress * 100}%` }} />
+        </div>
       </div>
     </div>
   );
@@ -177,5 +193,19 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#5a6a8a',
     fontSize: '11px',
     display: 'block',
+  },
+  progressTrack: {
+    width: '100%',
+    height: '3px',
+    background: '#1e3a5f',
+    borderRadius: '2px',
+    marginTop: '10px',
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    background: '#5a6a8a',
+    borderRadius: '2px',
+    transition: 'width 0.1s linear',
   },
 };
