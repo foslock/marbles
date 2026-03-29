@@ -297,4 +297,18 @@ export const SFX = {
     playTone(660, 0.08, 'triangle', 0.2);
     setTimeout(() => playTone(880, 0.1, 'triangle', 0.18), 60);
   },
+
+  /** Light switch flicked ON — sharp click + warm rising tone. */
+  minigameSwitchOn() {
+    playNoise(0.018, 0.28);
+    playTone(520, 0.1, 'triangle', 0.22);
+    setTimeout(() => playTone(660, 0.14, 'sine', 0.18), 45);
+  },
+
+  /** Light switch flicked OFF — click + descending tone. */
+  minigameSwitchOff() {
+    playNoise(0.018, 0.22);
+    playTone(400, 0.1, 'triangle', 0.2);
+    setTimeout(() => playTone(300, 0.14, 'sine', 0.14), 45);
+  },
 };

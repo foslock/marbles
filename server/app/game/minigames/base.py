@@ -163,6 +163,14 @@ MINIGAMES = [
         "duration": 30000,
         "type": "marble_runner",
     },
+    {
+        "id": "light_switch",
+        "name": "Light Switch",
+        "description": "Flick the switch as fast as you can!",
+        "instructions": "Swipe UP to turn the light ON, swipe DOWN to turn it OFF. Each successful flick scores a point — how many times can you flick it?",
+        "duration": 7000,
+        "type": "light_switch",
+    },
 ]
 
 
