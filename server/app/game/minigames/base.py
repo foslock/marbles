@@ -50,7 +50,7 @@ def _make_config(minigame_type: str) -> dict:
             return {"seed": random.randint(0, 999999)}
         case "marble_stack":
             return {"seed": random.randint(0, 999999)}
-        case "color_sort":
+        case "color_drop":
             return {"seed": random.randint(0, 999999)}
         case "marble_runner":
             return {"seed": random.randint(0, 999999)}
@@ -144,16 +144,16 @@ MINIGAMES = [
         "name": "Tower Builder",
         "description": "Stack the blocks as high as you can!",
         "instructions": "A rectangle slides left and right. Tap to drop it. Only the part that lands on the tower stays — the rest falls off. Miss completely and the game ends!",
-        "duration": 90000,
+        "duration": 45000,
         "type": "tower_builder",
     },
     {
-        "id": "color_sort",
-        "name": "Color Sort",
+        "id": "color_drop",
+        "name": "Color Drop",
         "description": "Sort the falling marbles by colour!",
         "instructions": "A marble falls from the top. Tap the matching coloured bucket before it hits the ground!",
         "duration": 18000,
-        "type": "color_sort",
+        "type": "color_drop",
     },
     {
         "id": "marble_runner",
@@ -167,7 +167,7 @@ MINIGAMES = [
         "id": "pump_it",
         "name": "Pump It",
         "description": "Inflate the balloon as much as possible!",
-        "instructions": "Drag the pump handle DOWN to push air into the balloon, then release to reset it. The balloon slowly deflates on its own — keep pumping to hold it full! Your score is how inflated the balloon is when time runs out.",
+        "instructions": "Drag the pump handle DOWN then back UP for each pump stroke. The balloon slowly deflates — keep pumping to push it past 100%! Your score is how inflated the balloon is when time runs out.",
         "duration": 12000,
         "type": "pump_it",
     },

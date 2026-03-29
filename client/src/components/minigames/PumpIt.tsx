@@ -4,9 +4,9 @@ import { SFX } from '../../utils/sound';
 
 // ── Tuning ────────────────────────────────────────────────────────────────────
 const HANDLE_TRAVEL = 80;   // px the handle moves top to bottom
-const AIR_PER_PX    = 0.42; // air added per px of downward handle movement
-const LEAK_RATE     = 11;   // air units / second (stops pumping → deflates in ~9 s)
-const MAX_AIR       = 100;
+const AIR_PER_PX    = 0.8;  // air added per px of downward handle movement
+const LEAK_RATE     = 11;   // air units / second (stops pumping → deflates in ~18 s from max)
+const MAX_AIR       = 200;  // balloon can inflate past "100%"
 
 // Balloon radius in the SVG viewBox (250 × 250 canvas)
 const MIN_R =  13;  // deflated
@@ -30,8 +30,9 @@ export function PumpIt({ onScoreUpdate }: MinigameComponentProps) {
   const scoreRef      = useRef(0);
   const [score, setScore] = useState(0);
 
-  const dragRef   = useRef<{ startY: number; startOffset: number } | null>(null);
-  const firedRef  = useRef(false); // sound fired this downstroke?
+  const dragRef        = useRef<{ startY: number; startOffset: number } | null>(null);
+  const firedRef       = useRef(false); // sound fired this downstroke?
+  const canInflateRef  = useRef(true);  // true once handle returns to top; false after reaching bottom
   const rafRef    = useRef(0);
   const lastTRef  = useRef(0);
 
@@ -69,8 +70,19 @@ export function PumpIt({ onScoreUpdate }: MinigameComponentProps) {
     const newOff  = Math.max(0, Math.min(HANDLE_TRAVEL, dragRef.current.startOffset + dy));
     const downPx  = newOff - handleOffRef.current;
 
-    if (downPx > 0) {
+    // Handle returned to top → allow next inflation
+    if (newOff < HANDLE_TRAVEL * 0.15) {
+      canInflateRef.current = true;
+    }
+
+    // Add air only on downstroke when canInflate is true
+    if (downPx > 0 && canInflateRef.current) {
       airRef.current = Math.min(MAX_AIR, airRef.current + downPx * AIR_PER_PX);
+    }
+
+    // At bottom of stroke: lock out inflation until handle returns to top
+    if (newOff >= HANDLE_TRAVEL * 0.85) {
+      canInflateRef.current = false;
     }
 
     // Fire pump sound once per downstroke (at ≥ 75 % travel)
@@ -88,14 +100,13 @@ export function PumpIt({ onScoreUpdate }: MinigameComponentProps) {
   }, []);
 
   const onPointerUp = useCallback(() => {
+    // Don't auto-reset handle — let it stay where released
     dragRef.current = null;
-    firedRef.current = false;
-    handleOffRef.current = 0;
-    setHandleOffset(0);
   }, []);
 
   // ── Derived visuals ─────────────────────────────────────────────────────────
-  const airFrac   = air / MAX_AIR;
+  // Visual caps at 100 air (full balloon), but score continues to 200
+  const airFrac   = Math.min(1, air / 100);
   const balloonR  = MIN_R + (MAX_R - MIN_R) * airFrac;
 
   // Balloon colour: deep red, brightens slightly when fuller
@@ -272,7 +283,7 @@ export function PumpIt({ onScoreUpdate }: MinigameComponentProps) {
           }} />
         </div>
 
-        <p style={styles.hint}>Drag down to pump · release to reset</p>
+        <p style={styles.hint}>Drag DOWN then back UP to pump</p>
       </div>
     </div>
   );
@@ -324,6 +335,7 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: 'column',
     alignItems: 'center',
     cursor: 'ns-resize',
+    touchAction: 'none',
   },
   pumpWrap: {
     position: 'relative',

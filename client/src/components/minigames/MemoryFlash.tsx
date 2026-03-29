@@ -13,7 +13,7 @@ export function MemoryFlash({ onScoreUpdate, config }: MinigameComponentProps) {
   const sequence = useRef<number[]>(
     (config?.sequence as number[]) || Array.from({ length: SEQUENCE_LENGTH }, () => Math.floor(Math.random() * 4))
   );
-  const [phase, setPhase] = useState<'showing' | 'input' | 'error'>('showing');
+  const [phase, setPhase] = useState<'showing' | 'input' | 'error' | 'success'>('showing');
   const [showIndex, setShowIndex] = useState(0);
   const [activeColor, setActiveColor] = useState<number | null>(null);
   const [inputIndex, setInputIndex] = useState(0);
@@ -22,6 +22,13 @@ export function MemoryFlash({ onScoreUpdate, config }: MinigameComponentProps) {
 
   // Show sequence phase: flash each tile in order
   useEffect(() => {
+    if (phase === 'success') {
+      const timer = setTimeout(() => {
+        setShowIndex(0);
+        setPhase('showing');
+      }, 400);
+      return () => clearTimeout(timer);
+    }
     if (phase !== 'showing') return;
     if (showIndex >= revealCount) {
       setActiveColor(null);
@@ -52,8 +59,7 @@ export function MemoryFlash({ onScoreUpdate, config }: MinigameComponentProps) {
         scoreRef.current += revealCount;
         onScoreUpdate(scoreRef.current);
         setRevealCount((r) => Math.min(r + 1, sequence.current.length));
-        setShowIndex(0);
-        setPhase('showing');
+        setPhase('success');
       }
     } else {
       // Wrong: flash all tiles red once, then immediately back to input
@@ -67,7 +73,7 @@ export function MemoryFlash({ onScoreUpdate, config }: MinigameComponentProps) {
     }
   }, [phase, inputIndex, revealCount, onScoreUpdate]);
 
-  const isShowing = phase === 'showing';
+  const isShowing = phase === 'showing' || phase === 'success';
   const isError = phase === 'error';
 
   return (
