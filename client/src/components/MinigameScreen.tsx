@@ -1,5 +1,7 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { MinigameInfo } from '../types/game';
+import { MINIGAME_REGISTRY } from './minigames';
+import { TapFrenzy } from './minigames/TapFrenzy';
 
 interface Props {
   minigameInfo: MinigameInfo;
@@ -7,12 +9,19 @@ interface Props {
   onSubmitScore: (minigameId: string, score: number) => void;
 }
 
+/**
+ * MinigameScreen handles the lifecycle shared by ALL minigames:
+ *   countdown -> playing (delegates to registered component) -> done -> submit
+ *
+ * Individual minigame logic lives in src/components/minigames/*.tsx
+ * and is looked up from the registry by the server-provided `type` key.
+ */
 export function MinigameScreen({ minigameInfo, playerId, onSubmitScore }: Props) {
   const { minigame } = minigameInfo;
   const [phase, setPhase] = useState<'countdown' | 'playing' | 'done'>('countdown');
   const [countdown, setCountdown] = useState(3);
-  const [score, setScore] = useState(0);
   const [timeLeft, setTimeLeft] = useState(minigame.duration);
+  const scoreRef = useRef(0);
   const submitted = useRef(false);
 
   // Countdown
@@ -41,16 +50,17 @@ export function MinigameScreen({ minigameInfo, playerId, onSubmitScore }: Props)
   useEffect(() => {
     if (phase === 'done' && !submitted.current) {
       submitted.current = true;
-      onSubmitScore(minigame.id, score);
+      onSubmitScore(minigame.id, scoreRef.current);
     }
-  }, [phase, score, minigame.id, onSubmitScore]);
+  }, [phase, minigame.id, onSubmitScore]);
 
-  const handleTap = useCallback(() => {
-    if (phase !== 'playing') return;
-    setScore((s) => s + 1);
-  }, [phase]);
+  const handleScoreUpdate = (score: number) => {
+    scoreRef.current = score;
+  };
 
-  // Render based on minigame type
+  // Look up the game component from the registry, fall back to TapFrenzy
+  const GameComponent = MINIGAME_REGISTRY[minigame.type] || TapFrenzy;
+
   const progressPercent = phase === 'playing'
     ? (timeLeft / minigame.duration) * 100
     : 100;
@@ -68,8 +78,7 @@ export function MinigameScreen({ minigameInfo, playerId, onSubmitScore }: Props)
       )}
 
       {phase === 'playing' && (
-        <div style={styles.gameArea} onPointerDown={handleTap}>
-          {/* Progress bar */}
+        <div style={styles.gameArea}>
           <div style={styles.progressBar}>
             <div
               style={{
@@ -78,210 +87,22 @@ export function MinigameScreen({ minigameInfo, playerId, onSubmitScore }: Props)
               }}
             />
           </div>
-
-          {/* Tap-based minigames */}
-          {(minigame.type === 'tap_count' || minigame.type === 'reaction' || minigame.type === 'target_tap') && (
-            <div style={styles.tapArea}>
-              <span style={styles.scoreDisplay}>{score}</span>
-              <span style={styles.tapHint}>TAP!</span>
-            </div>
-          )}
-
-          {/* Canvas fill minigame */}
-          {minigame.type === 'canvas_fill' && (
-            <CanvasFillGame
-              onScoreUpdate={setScore}
-              timeLeft={timeLeft}
-              duration={minigame.duration}
-            />
-          )}
-
-          {/* Ball tracking */}
-          {minigame.type === 'tracking' && (
-            <BallTrackingGame
-              onScoreUpdate={setScore}
-              timeLeft={timeLeft}
-              duration={minigame.duration}
-            />
-          )}
-
-          {/* Rhythm tap */}
-          {minigame.type === 'rhythm' && (
-            <RhythmGame
-              onScoreUpdate={setScore}
-              timeLeft={timeLeft}
-              duration={minigame.duration}
-            />
-          )}
-
-          {/* Default: tap game for unsupported types */}
-          {!['tap_count', 'reaction', 'target_tap', 'canvas_fill', 'tracking', 'rhythm'].includes(minigame.type) && (
-            <div style={styles.tapArea}>
-              <span style={styles.scoreDisplay}>{score}</span>
-              <span style={styles.tapHint}>TAP!</span>
-            </div>
-          )}
+          <GameComponent
+            onScoreUpdate={handleScoreUpdate}
+            timeLeft={timeLeft}
+            duration={minigame.duration}
+            config={minigame.config}
+          />
         </div>
       )}
 
       {phase === 'done' && (
         <div style={styles.doneContainer}>
           <h2 style={styles.doneTitle}>Time's Up!</h2>
-          <span style={styles.finalScore}>{score}</span>
+          <span style={styles.finalScore}>{scoreRef.current}</span>
           <p style={styles.waiting}>Waiting for other players...</p>
         </div>
       )}
-    </div>
-  );
-}
-
-// Canvas fill sub-game
-function CanvasFillGame({
-  onScoreUpdate,
-}: {
-  onScoreUpdate: (score: number) => void;
-  timeLeft: number;
-  duration: number;
-}) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const filledPixels = useRef(0);
-
-  const handleDraw = useCallback(
-    (e: React.PointerEvent) => {
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-
-      const rect = canvas.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
-
-      ctx.beginPath();
-      ctx.arc(x, y, 20, 0, Math.PI * 2);
-      ctx.fillStyle = `hsl(${(filledPixels.current * 3) % 360}, 80%, 60%)`;
-      ctx.fill();
-
-      filledPixels.current += 1;
-      onScoreUpdate(filledPixels.current);
-    },
-    [onScoreUpdate]
-  );
-
-  return (
-    <canvas
-      ref={canvasRef}
-      width={300}
-      height={400}
-      style={styles.miniCanvas}
-      onPointerMove={handleDraw}
-    />
-  );
-}
-
-// Ball tracking sub-game
-function BallTrackingGame({
-  onScoreUpdate,
-}: {
-  onScoreUpdate: (score: number) => void;
-  timeLeft: number;
-  duration: number;
-}) {
-  const [ballPos, setBallPos] = useState({ x: 150, y: 200 });
-  const [fingerDown, setFingerDown] = useState(false);
-  const [fingerPos, setFingerPos] = useState({ x: 0, y: 0 });
-  const scoreRef = useRef(0);
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setBallPos({
-        x: 50 + Math.random() * 200,
-        y: 50 + Math.random() * 300,
-      });
-    }, 800);
-    return () => clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
-    if (fingerDown) {
-      const dist = Math.hypot(fingerPos.x - ballPos.x, fingerPos.y - ballPos.y);
-      if (dist < 40) {
-        scoreRef.current += 1;
-        onScoreUpdate(scoreRef.current);
-      }
-    }
-  }, [fingerDown, fingerPos, ballPos, onScoreUpdate]);
-
-  const handlePointer = (e: React.PointerEvent) => {
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    setFingerPos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
-  };
-
-  return (
-    <div
-      ref={containerRef}
-      style={styles.trackingArea}
-      onPointerDown={(e) => { setFingerDown(true); handlePointer(e); }}
-      onPointerMove={handlePointer}
-      onPointerUp={() => setFingerDown(false)}
-    >
-      <div
-        style={{
-          ...styles.ball,
-          left: ballPos.x - 25,
-          top: ballPos.y - 25,
-        }}
-      />
-      <span style={styles.scoreOverlay}>{scoreRef.current}</span>
-    </div>
-  );
-}
-
-// Rhythm tap sub-game
-function RhythmGame({
-  onScoreUpdate,
-}: {
-  onScoreUpdate: (score: number) => void;
-  timeLeft: number;
-  duration: number;
-}) {
-  const [flash, setFlash] = useState(false);
-  const [bpm] = useState(() => 80 + Math.floor(Math.random() * 80));
-  const scoreRef = useRef(0);
-  const lastFlash = useRef(Date.now());
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setFlash(true);
-      lastFlash.current = Date.now();
-      setTimeout(() => setFlash(false), 150);
-    }, (60 / bpm) * 1000);
-    return () => clearInterval(interval);
-  }, [bpm]);
-
-  const handleTap = () => {
-    const delta = Math.abs(Date.now() - lastFlash.current);
-    const beatInterval = (60 / bpm) * 1000;
-    const accuracy = Math.max(0, 100 - (delta / beatInterval) * 200);
-    scoreRef.current += Math.round(accuracy);
-    onScoreUpdate(scoreRef.current);
-  };
-
-  return (
-    <div
-      style={{
-        ...styles.rhythmArea,
-        background: flash
-          ? 'radial-gradient(circle, #e74c3c, #c0392b)'
-          : 'radial-gradient(circle, #1a3a5c, #112240)',
-      }}
-      onPointerDown={handleTap}
-    >
-      <p style={styles.rhythmText}>{bpm} BPM</p>
-      <p style={styles.rhythmHint}>Tap on the beat!</p>
-      <span style={styles.scoreOverlay}>{scoreRef.current}</span>
     </div>
   );
 }
@@ -343,24 +164,6 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: '3px',
     transition: 'width 0.1s linear',
   },
-  tapArea: {
-    flex: 1,
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '100%',
-  },
-  scoreDisplay: {
-    color: '#f39c12',
-    fontSize: '80px',
-    fontWeight: 800,
-  },
-  tapHint: {
-    color: '#8892b0',
-    fontSize: '18px',
-    marginTop: '8px',
-  },
   doneContainer: {
     flex: 1,
     display: 'flex',
@@ -382,55 +185,5 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#8892b0',
     fontSize: '14px',
     marginTop: '16px',
-  },
-  miniCanvas: {
-    borderRadius: '12px',
-    background: '#112240',
-    touchAction: 'none',
-    maxWidth: '100%',
-  },
-  trackingArea: {
-    flex: 1,
-    width: '100%',
-    position: 'relative',
-    touchAction: 'none',
-  },
-  ball: {
-    position: 'absolute',
-    width: '50px',
-    height: '50px',
-    borderRadius: '50%',
-    background: 'radial-gradient(circle, #e74c3c, #c0392b)',
-    transition: 'left 0.3s, top 0.3s',
-  },
-  scoreOverlay: {
-    position: 'absolute',
-    top: '12px',
-    right: '16px',
-    color: '#f39c12',
-    fontSize: '24px',
-    fontWeight: 800,
-  },
-  rhythmArea: {
-    flex: 1,
-    width: '100%',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-    transition: 'background 0.15s',
-    touchAction: 'none',
-  },
-  rhythmText: {
-    color: '#fff',
-    fontSize: '36px',
-    fontWeight: 800,
-    margin: 0,
-  },
-  rhythmHint: {
-    color: '#a8b2d1',
-    fontSize: '16px',
-    marginTop: '8px',
   },
 };
