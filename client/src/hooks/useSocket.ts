@@ -360,7 +360,8 @@ export function useSocket() {
 
   const chooseMove = useCallback((tileId: number, path?: number[]) => {
     socketRef.current?.emit('choose_move', { tileId, path: path || [] });
-    setDiceResult(null);
+    // Don't clear diceResult here — GameScreen uses moveChosen to hide the
+    // DiceOverlay immediately.  diceResult is cleared later by turn_update.
   }, []);
 
   const makeChoice = useCallback((choiceType: string, targetId: string, amount?: number) => {
