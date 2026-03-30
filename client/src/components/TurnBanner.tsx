@@ -18,7 +18,7 @@ const TOTAL_MS = SLIDE_IN_MS + HOLD_MS + SLIDE_OUT_MS;
  */
 export function TurnBanner({ playerName, playerEmoji, triggerKey }: Props) {
   const [visible, setVisible] = useState(false);
-  const [phase, setPhase] = useState<'in' | 'hold' | 'out'>('in');
+  const [phase, setPhase] = useState<'enter' | 'in' | 'out'>('enter');
   const [displayName, setDisplayName] = useState(playerName);
   const [displayEmoji, setDisplayEmoji] = useState(playerEmoji);
   const firstRender = useRef(true);
@@ -33,15 +33,22 @@ export function TurnBanner({ playerName, playerEmoji, triggerKey }: Props) {
 
     setDisplayName(playerName);
     setDisplayEmoji(playerEmoji);
-    setPhase('in');
+    // Start off-screen with no transition so the browser paints the initial position
+    setPhase('enter');
     setVisible(true);
 
-    const holdTimer = setTimeout(() => setPhase('hold'), SLIDE_IN_MS);
+    // Double rAF to ensure the browser has painted at 100vw before we transition
+    const rafId = requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setPhase('in');
+      });
+    });
+
     const outTimer = setTimeout(() => setPhase('out'), SLIDE_IN_MS + HOLD_MS);
     const hideTimer = setTimeout(() => setVisible(false), TOTAL_MS);
 
     return () => {
-      clearTimeout(holdTimer);
+      cancelAnimationFrame(rafId);
       clearTimeout(outTimer);
       clearTimeout(hideTimer);
     };
@@ -50,9 +57,9 @@ export function TurnBanner({ playerName, playerEmoji, triggerKey }: Props) {
   if (!visible || !displayName) return null;
 
   const translateX =
-    phase === 'in' ? '100vw'   // start off-screen right
-      : phase === 'hold' ? '0' // centered
-        : '-100vw';             // exit off-screen left
+    phase === 'enter' ? '100vw'  // off-screen right, no transition yet
+      : phase === 'in' ? '0'    // slide to center
+        : '-100vw';              // exit off-screen left
 
   return (
     <div style={styles.wrapper}>
