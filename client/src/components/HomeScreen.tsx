@@ -1,8 +1,72 @@
 import { useState, useEffect, useRef } from 'react';
 import { MINIGAME_REGISTRY } from './minigames';
 import { TapFrenzy } from './minigames/TapFrenzy';
+import { HowToPlayDialog } from './HowToPlayDialog';
 import { SFX } from '../utils/sound';
 import { Haptics } from '../utils/haptics';
+
+// Inject keyframe animations once
+const ANIM_STYLE_ID = 'ltm-home-anims';
+if (typeof document !== 'undefined' && !document.getElementById(ANIM_STYLE_ID)) {
+  const style = document.createElement('style');
+  style.id = ANIM_STYLE_ID;
+  style.textContent = `
+    @keyframes ltmGradientPan {
+      0%   { background-position: 0% 50%; }
+      100% { background-position: -200% 50%; }
+    }
+    @keyframes ltmFloat {
+      0%, 100% { transform: translateY(0) scale(1); opacity: 0.15; }
+      50% { transform: translateY(-30px) scale(1.1); opacity: 0.25; }
+    }
+    @keyframes ltmBtnGlow {
+      0%   { box-shadow: 0 4px 15px rgba(231, 76, 60, 0.3); }
+      50%  { box-shadow: 0 4px 25px rgba(231, 76, 60, 0.6); }
+      100% { box-shadow: 0 4px 15px rgba(231, 76, 60, 0.3); }
+    }
+    @keyframes htpBounce {
+      0%   { transform: scale(0) translateY(10px); opacity: 0; }
+      60%  { transform: scale(1.15) translateY(-3px); opacity: 1; }
+      100% { transform: scale(1) translateY(0); opacity: 1; }
+    }
+    @keyframes htpSlideRight {
+      0%   { transform: translateX(0); }
+      100% { transform: translateX(18px); }
+    }
+    @keyframes htpSlideLeft {
+      0%   { transform: translateX(0); }
+      100% { transform: translateX(-18px); }
+    }
+    .ltm-btn-hover {
+      transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+    }
+    .ltm-btn-hover:hover {
+      transform: translateY(-2px) scale(1.03);
+    }
+    .ltm-btn-hover:active {
+      transform: translateY(0) scale(0.98);
+    }
+    .ltm-primary-hover:hover {
+      box-shadow: 0 6px 24px rgba(231, 76, 60, 0.5);
+    }
+    .ltm-secondary-hover:hover {
+      border-color: #5dade2;
+      color: #5dade2;
+      box-shadow: 0 4px 20px rgba(52, 152, 219, 0.3);
+    }
+    .ltm-playtest-hover:hover {
+      border-color: #a8b2d1;
+      color: #a8b2d1;
+      box-shadow: 0 4px 16px rgba(136, 146, 176, 0.2);
+    }
+    .ltm-htp-hover:hover {
+      border-color: #f5b041;
+      color: #f5b041;
+      box-shadow: 0 4px 20px rgba(243, 156, 18, 0.3);
+    }
+  `;
+  document.head.appendChild(style);
+}
 
 // Client-side minigame definitions matching server/app/game/minigames/base.py
 const PLAYTEST_MINIGAMES = [
@@ -41,6 +105,16 @@ function makePlaytestConfig(type: string): Record<string, unknown> {
   }
 }
 
+// Generate random floating marble positions for background
+const BG_MARBLES = Array.from({ length: 12 }, (_, i) => ({
+  left: `${5 + (i * 8) % 90}%`,
+  top: `${10 + ((i * 17 + 3) % 80)}%`,
+  size: 10 + (i % 4) * 6,
+  delay: i * 1.2,
+  duration: 4 + (i % 3) * 2,
+  color: ['#f39c12', '#e74c3c', '#9b59b6', '#3498db', '#2ecc71', '#e67e22'][i % 6],
+}));
+
 interface Props {
   connected: boolean;
   onCreateSession: (name: string, targetMarbles: number) => void;
@@ -53,6 +127,7 @@ export function HomeScreen({ connected, onCreateSession, onJoinSession }: Props)
   const [passphrase, setPassphrase] = useState('');
   const [targetMarbles, setTargetMarbles] = useState(10);
   const [role, setRole] = useState<'player' | 'spectator'>('player');
+  const [showHowToPlay, setShowHowToPlay] = useState(false);
 
   // Playtest state
   const [selectedMinigame, setSelectedMinigame] = useState(PLAYTEST_MINIGAMES[0].type);
@@ -121,6 +196,26 @@ export function HomeScreen({ connected, onCreateSession, onJoinSession }: Props)
 
   return (
     <div style={styles.container}>
+      {/* Floating background marbles */}
+      <div style={styles.bgMarbles}>
+        {BG_MARBLES.map((m, i) => (
+          <div
+            key={i}
+            style={{
+              position: 'absolute',
+              left: m.left,
+              top: m.top,
+              width: m.size,
+              height: m.size,
+              borderRadius: '50%',
+              background: `radial-gradient(circle at 35% 35%, ${m.color}66, ${m.color}22)`,
+              animation: `ltmFloat ${m.duration}s ease-in-out ${m.delay}s infinite`,
+              pointerEvents: 'none',
+            }}
+          />
+        ))}
+      </div>
+
       <div style={styles.titleContainer}>
         <h1 style={styles.title}>Losing Their</h1>
         <h1 style={styles.titleMarbles}>Marbles</h1>
@@ -130,13 +225,19 @@ export function HomeScreen({ connected, onCreateSession, onJoinSession }: Props)
       {mode === 'menu' && (
         <div style={styles.buttonGroup}>
           <button
-            style={{ ...styles.primaryButton, ...(!connected ? styles.disabledButton : {}) }}
+            className="ltm-btn-hover ltm-primary-hover"
+            style={{
+              ...styles.primaryButton,
+              ...(!connected ? styles.disabledButton : {}),
+              animation: connected ? 'ltmBtnGlow 3s ease-in-out infinite' : 'none',
+            }}
             onClick={() => connected && setMode('create')}
             disabled={!connected}
           >
-            {connected ? 'Host a Game' : 'Connecting…'}
+            {connected ? 'Host a Game' : 'Connecting\u2026'}
           </button>
           <button
+            className="ltm-btn-hover ltm-secondary-hover"
             style={{ ...styles.secondaryButton, ...(!connected ? styles.disabledButton : {}) }}
             onClick={() => connected && setMode('join')}
             disabled={!connected}
@@ -144,6 +245,14 @@ export function HomeScreen({ connected, onCreateSession, onJoinSession }: Props)
             Join a Game
           </button>
           <button
+            className="ltm-btn-hover ltm-htp-hover"
+            style={styles.howToPlayButton}
+            onClick={() => setShowHowToPlay(true)}
+          >
+            How to Play
+          </button>
+          <button
+            className="ltm-btn-hover ltm-playtest-hover"
             style={styles.playtestButton}
             onClick={() => setMode('playtest')}
           >
@@ -180,7 +289,7 @@ export function HomeScreen({ connected, onCreateSession, onJoinSession }: Props)
               </button>
             </div>
           </div>
-          <button style={styles.primaryButton} onClick={handleCreate}>
+          <button className="ltm-btn-hover ltm-primary-hover" style={styles.primaryButton} onClick={handleCreate}>
             Create Game
           </button>
           <button style={styles.textButton} onClick={() => setMode('menu')}>
@@ -225,7 +334,7 @@ export function HomeScreen({ connected, onCreateSession, onJoinSession }: Props)
               Spectator
             </button>
           </div>
-          <button style={styles.primaryButton} onClick={handleJoin}>
+          <button className="ltm-btn-hover ltm-primary-hover" style={styles.primaryButton} onClick={handleJoin}>
             Join Game
           </button>
           <button style={styles.textButton} onClick={() => setMode('menu')}>
@@ -249,7 +358,7 @@ export function HomeScreen({ connected, onCreateSession, onJoinSession }: Props)
           <p style={styles.playtestInstructions}>
             {PLAYTEST_MINIGAMES.find((m) => m.type === selectedMinigame)?.instructions}
           </p>
-          <button style={styles.primaryButton} onClick={startPlaytest}>
+          <button className="ltm-btn-hover ltm-primary-hover" style={styles.primaryButton} onClick={startPlaytest}>
             Play
           </button>
           <button style={styles.textButton} onClick={() => setMode('menu')}>
@@ -293,7 +402,7 @@ export function HomeScreen({ connected, onCreateSession, onJoinSession }: Props)
               <div style={styles.playtestCenter}>
                 <h2 style={styles.playtestDoneTitle}>Time's Up!</h2>
                 <span style={styles.playtestScore}>{playtestFinalScore}</span>
-                <button style={{ ...styles.primaryButton, marginTop: '24px' }} onClick={() => setMode('playtest')}>
+                <button className="ltm-btn-hover ltm-primary-hover" style={{ ...styles.primaryButton, marginTop: '24px' }} onClick={() => setMode('playtest')}>
                   Back to Minigames
                 </button>
                 <button style={styles.textButton} onClick={() => setMode('menu')}>
@@ -304,6 +413,8 @@ export function HomeScreen({ connected, onCreateSession, onJoinSession }: Props)
           </div>
         );
       })()}
+
+      {showHowToPlay && <HowToPlayDialog onClose={() => setShowHowToPlay(false)} />}
     </div>
   );
 }
@@ -317,10 +428,20 @@ const styles: Record<string, React.CSSProperties> = {
     height: '100%',
     padding: '20px',
     background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)',
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  bgMarbles: {
+    position: 'absolute',
+    inset: 0,
+    pointerEvents: 'none',
+    overflow: 'hidden',
   },
   titleContainer: {
     textAlign: 'center',
     marginBottom: '40px',
+    position: 'relative',
+    zIndex: 1,
   },
   title: {
     fontSize: '36px',
@@ -332,10 +453,12 @@ const styles: Record<string, React.CSSProperties> = {
   titleMarbles: {
     fontSize: '52px',
     fontWeight: 800,
-    background: 'linear-gradient(90deg, #f39c12, #e74c3c, #9b59b6, #3498db)',
+    background: 'linear-gradient(90deg, #f39c12, #e74c3c, #9b59b6, #3498db, #f39c12, #e74c3c)',
+    backgroundSize: '200% 100%',
     WebkitBackgroundClip: 'text',
     WebkitTextFillColor: 'transparent',
     margin: 0,
+    animation: 'ltmGradientPan 6s linear infinite',
   },
   subtitle: {
     color: '#8892b0',
@@ -349,10 +472,13 @@ const styles: Record<string, React.CSSProperties> = {
     gap: '12px',
     width: '100%',
     maxWidth: '300px',
+    position: 'relative',
+    zIndex: 1,
   },
   disabledButton: {
     opacity: 0.45,
     cursor: 'not-allowed',
+    animation: 'none',
   },
   primaryButton: {
     padding: '16px 32px',
@@ -363,7 +489,6 @@ const styles: Record<string, React.CSSProperties> = {
     background: 'linear-gradient(135deg, #e74c3c, #c0392b)',
     color: '#fff',
     cursor: 'pointer',
-    transition: 'transform 0.1s',
   },
   secondaryButton: {
     padding: '16px 32px',
@@ -373,6 +498,16 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: '12px',
     background: 'transparent',
     color: '#3498db',
+    cursor: 'pointer',
+  },
+  howToPlayButton: {
+    padding: '14px 32px',
+    fontSize: '16px',
+    fontWeight: 600,
+    border: '2px solid #f39c12',
+    borderRadius: '12px',
+    background: 'transparent',
+    color: '#f39c12',
     cursor: 'pointer',
   },
   textButton: {
@@ -389,6 +524,8 @@ const styles: Record<string, React.CSSProperties> = {
     gap: '12px',
     width: '100%',
     maxWidth: '300px',
+    position: 'relative',
+    zIndex: 1,
   },
   input: {
     padding: '14px 16px',

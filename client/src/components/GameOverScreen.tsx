@@ -8,6 +8,7 @@ interface Props {
 }
 
 const RANK_COLORS  = ['#f39c12', '#c0c0c8', '#cd7f32'] as const;
+const MEDAL_ICONS  = ['🥇', '🥈', '🥉'] as const;
 // Podium block heights for [2nd, 1st, 3rd] layout columns
 const PODIUM_H     = [138, 196, 96] as const;
 
@@ -105,7 +106,9 @@ export function GameOverScreen({ gameState }: Props) {
               >
                 {/* Player info above the podium block */}
                 <div style={styles.playerInfo}>
-                  {isFirst && <div style={styles.crown}>👑</div>}
+                  <div style={{ fontSize: isFirst ? 32 : 26, lineHeight: 1 }}>
+                    {MEDAL_ICONS[rank - 1]}
+                  </div>
                   <div style={{ fontSize: isFirst ? 54 : 40, lineHeight: 1.1 }}>
                     {player.token?.emoji ?? '?'}
                   </div>
@@ -207,10 +210,6 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     gap: '3px',
     marginBottom: '8px',
-  },
-  crown: {
-    fontSize: '26px',
-    lineHeight: 1,
   },
   playerName: {
     fontWeight: 800,
