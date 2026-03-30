@@ -126,6 +126,7 @@ export default function App() {
           onClearStealAnimation={socket.clearStealAnimation}
           onTurnComplete={socket.turnComplete}
           onEndGame={socket.endGame}
+          getDiagnostics={socket.getDiagnostics}
         />
       )}
 

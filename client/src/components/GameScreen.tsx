@@ -36,6 +36,7 @@ interface Props {
   onClearStealAnimation: () => void;
   onTurnComplete: () => void;
   onEndGame: () => void;
+  getDiagnostics: () => unknown;
 }
 
 export function GameScreen({
@@ -61,6 +62,7 @@ export function GameScreen({
   onClearStealAnimation,
   onTurnComplete,
   onEndGame,
+  getDiagnostics,
 }: Props) {
   const [showScoreboard, setShowScoreboard] = useState(false);
   const [moveChosen, setMoveChosen] = useState(false);
@@ -290,6 +292,7 @@ export function GameScreen({
             currentPlayerId={playerId}
             hostId={gameState.hostId}
             onEndGame={onEndGame}
+            getDiagnostics={getDiagnostics}
           />
         ) : (
           <GameBoard

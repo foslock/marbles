@@ -4,6 +4,7 @@ import type {
   GamePhase,
   LobbyData,
   GameState,
+  PlayerState,
   DiceResult,
   TileEffect,
   MinigameInfo,
@@ -16,9 +17,43 @@ import { Haptics } from '../utils/haptics';
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || '';
 
+// ── Diagnostics event log ──────────────────────────────────────────────────
+const MAX_EVENT_LOG = 120;
+
+interface EventLogEntry {
+  /** Monotonic index */
+  seq: number;
+  /** ISO timestamp */
+  ts: string;
+  /** 'rx' = received from server, 'tx' = sent to server */
+  dir: 'rx' | 'tx';
+  /** Socket.IO event name */
+  event: string;
+  /** Event payload (trimmed for size) */
+  data: unknown;
+}
+
 export function useSocket() {
   const socketRef = useRef<Socket | null>(null);
   const playerIdRef = useRef<string | null>(null);
+
+  // ── Event log ring buffer ────────────────────────────────────────────────
+  const eventLogRef = useRef<EventLogEntry[]>([]);
+  const eventSeqRef = useRef(0);
+  const emitRef = useRef<(event: string, data?: unknown) => void>(() => {});
+
+  const logEvent = useCallback((dir: 'rx' | 'tx', event: string, data: unknown) => {
+    const entry: EventLogEntry = {
+      seq: eventSeqRef.current++,
+      ts: new Date().toISOString(),
+      dir,
+      event,
+      data,
+    };
+    const log = eventLogRef.current;
+    log.push(entry);
+    if (log.length > MAX_EVENT_LOG) log.splice(0, log.length - MAX_EVENT_LOG);
+  }, []);
   const [connected, setConnected] = useState(false);
   const [connectionError, setConnectionError] = useState<{ message: string; details: string } | null>(null);
   const [phase, setPhase] = useState<GamePhase>('home');
@@ -76,6 +111,20 @@ export function useSocket() {
       }
     }, CONNECTION_TIMEOUT_MS);
 
+    // Helper: wrap socket.on to auto-log received events
+    const on = <T,>(event: string, handler: (data: T) => void) => {
+      socket.on(event, (data: T) => {
+        logEvent('rx', event, data);
+        handler(data);
+      });
+    };
+    // Helper: emit + log
+    const emit = (event: string, data?: unknown) => {
+      logEvent('tx', event, data ?? {});
+      socket.emit(event, data ?? {});
+    };
+    emitRef.current = emit;
+
     socket.on('connect', () => {
       clearTimeout(timeoutId);
       setConnected(true);
@@ -86,7 +135,7 @@ export function useSocket() {
         try {
           const { passphrase, playerId: savedPlayerId } = JSON.parse(savedSession);
           if (passphrase && savedPlayerId) {
-            socket.emit('reconnect_session', { passphrase, playerId: savedPlayerId });
+            emit('reconnect_session', { passphrase, playerId: savedPlayerId });
           }
         } catch {}
       }
@@ -98,9 +147,9 @@ export function useSocket() {
       });
     });
     socket.on('disconnect', () => setConnected(false));
-    socket.on('error', (data: { message: string }) => setError(data.message));
+    socket.on('error', (data: { message: string }) => { logEvent('rx', 'error', data); setError(data.message); });
 
-    socket.on('session_created', (data) => {
+    on('session_created', (data: { playerId: string; sessionId: string; lobby: LobbyData }) => {
       setPlayerId(data.playerId);
       playerIdRef.current = data.playerId;
       setSessionId(data.sessionId);
@@ -113,7 +162,7 @@ export function useSocket() {
       }));
     });
 
-    socket.on('joined_session', (data) => {
+    on('joined_session', (data: { playerId: string; sessionId: string; lobby: LobbyData }) => {
       setPlayerId(data.playerId);
       playerIdRef.current = data.playerId;
       setSessionId(data.sessionId);
@@ -125,25 +174,25 @@ export function useSocket() {
       }));
     });
 
-    socket.on('lobby_update', (data: LobbyData) => {
+    on('lobby_update', (data: LobbyData) => {
       setLobby(data);
     });
 
-    socket.on('game_started', (data: GameState) => {
+    on('game_started', (data: GameState) => {
       setGameState(data);
       setPhase('playing');
     });
 
-    socket.on('game_state', (data: GameState) => {
+    on('game_state', (data: GameState) => {
       setGameState(data);
       if (data.state === 'playing') setPhase('playing');
     });
 
-    socket.on('dice_rolled', (data: DiceResult) => {
+    on('dice_rolled', (data: DiceResult) => {
       setDiceResult(data);
     });
 
-    socket.on('advantage_chosen', (data: { playerId: string; roll: number; reachableTiles: { tileId: number; path: number[] }[]; dizzy?: boolean }) => {
+    on('advantage_chosen', (data: { playerId: string; roll: number; reachableTiles: { tileId: number; path: number[] }[]; dizzy?: boolean }) => {
       // Update the dice result with the chosen roll and reachable tiles
       setDiceResult((prev) => {
         if (!prev || prev.playerId !== data.playerId) return prev;
@@ -151,7 +200,7 @@ export function useSocket() {
       });
     });
 
-    socket.on('player_moved', (data) => {
+    on('player_moved', (data: { playerId: string; tileId: number; path: number[] }) => {
       // Trigger animation before updating state
       if (data.path && data.path.length > 1) {
         setMoveAnimation({ playerId: data.playerId, path: data.path });
@@ -169,13 +218,13 @@ export function useSocket() {
       });
     });
 
-    socket.on('tile_effect', (data: TileEffect) => {
+    on('tile_effect', (data: TileEffect) => {
       // Board updates are now deferred — they arrive via tile_swap at end of turn
       // Activity item is added by GameScreen after movement animation completes
       setTileEffect(data);
     });
 
-    socket.on('tile_swap', (data: { sourceTileId: number; targetTileId: number | null; color: string; boardUpdates: { id: number; color: 'green' | 'red' | 'neutral'; category: string; effect: string }[] }) => {
+    on('tile_swap', (data: { sourceTileId: number; targetTileId: number | null; color: string; boardUpdates: { id: number; color: 'green' | 'red' | 'neutral'; category: string; effect: string }[] }) => {
       // Buffer board updates — they'll be applied after the swap animation completes
       // so the destination tile doesn't change color before the bubble arrives.
       if (data.boardUpdates && data.boardUpdates.length > 0) {
@@ -194,11 +243,11 @@ export function useSocket() {
       }
     });
 
-    socket.on('awaiting_choice', (data: TileEffect) => {
+    on('awaiting_choice', (data: TileEffect) => {
       setAwaitingChoice(data);
     });
 
-    socket.on('choice_resolved', (data: {
+    on('choice_resolved', (data: {
       playerId: string;
       playerName?: string;
       type: string;
@@ -249,12 +298,12 @@ export function useSocket() {
       }
     });
 
-    socket.on('minigame_start', (data: MinigameInfo) => {
+    on('minigame_start', (data: MinigameInfo) => {
       setMinigameInfo(data);
       setPhase('minigame');
     });
 
-    socket.on('minigame_results', (data: MinigameResults) => {
+    on('minigame_results', (data: MinigameResults) => {
       setMinigameResults(data);
       setMinigameInfo(null);
       // Transition back to 'playing' so the results overlay renders inside GameScreen.
@@ -280,7 +329,7 @@ export function useSocket() {
       }
     });
 
-    socket.on('turn_update', (data) => {
+    on('turn_update', (data: { currentTurnPlayerId: string; currentTurnIndex: number; turnNumber: number; players: GameState['players'] }) => {
       setGameState((prev) => {
         if (!prev) return prev;
         return {
@@ -303,7 +352,7 @@ export function useSocket() {
       }
     });
 
-    socket.on('game_over', (data) => {
+    on('game_over', (data: { winnerId: string; players: GameState['players'] }) => {
       setGameState((prev) => {
         if (!prev) return prev;
         return { ...prev, winnerId: data.winnerId, state: 'finished', players: data.players };
@@ -314,11 +363,11 @@ export function useSocket() {
       sessionStorage.removeItem('ltm_session');
     });
 
-    socket.on('lobby_tap', (data: { playerId: string; emoji: string; x: number; y: number }) => {
+    on('lobby_tap', (data: { playerId: string; emoji: string; x: number; y: number }) => {
       setLobbyTap(data);
     });
 
-    socket.on('game_ended', () => {
+    on('game_ended', () => {
       // Host forcibly ended the game — reset all client state
       setGameState(null);
       setDiceResult(null);
@@ -344,37 +393,37 @@ export function useSocket() {
   }, []);
 
   const createSession = useCallback((name: string, targetMarbles: number) => {
-    socketRef.current?.emit('create_session', { name, targetMarbles });
+    emitRef.current('create_session', { name, targetMarbles });
   }, []);
 
   const joinSession = useCallback((passphrase: string, name: string, role: string) => {
-    socketRef.current?.emit('join_session', { passphrase, name, role });
+    emitRef.current('join_session', { passphrase, name, role });
   }, []);
 
   const startGame = useCallback(() => {
-    socketRef.current?.emit('start_game', { sessionId });
+    emitRef.current('start_game', { sessionId });
   }, [sessionId]);
 
   const rollDice = useCallback(() => {
-    socketRef.current?.emit('roll_dice', {});
+    emitRef.current('roll_dice', {});
   }, []);
 
   const chooseAdvantage = useCallback((roll: number) => {
-    socketRef.current?.emit('choose_advantage', { roll });
+    emitRef.current('choose_advantage', { roll });
   }, []);
 
   const chooseMove = useCallback((tileId: number, path?: number[]) => {
-    socketRef.current?.emit('choose_move', { tileId, path: path || [] });
+    emitRef.current('choose_move', { tileId, path: path || [] });
     // Don't clear diceResult here — GameScreen uses moveChosen to hide the
     // DiceOverlay immediately.  diceResult is cleared later by turn_update.
   }, []);
 
   const makeChoice = useCallback((choiceType: string, targetId: string, amount?: number) => {
-    socketRef.current?.emit('make_choice', { choiceType, targetId, amount });
+    emitRef.current('make_choice', { choiceType, targetId, amount });
   }, []);
 
   const submitMinigameScore = useCallback((minigameId: string, score: number) => {
-    socketRef.current?.emit('submit_minigame_score', { minigameId, score });
+    emitRef.current('submit_minigame_score', { minigameId, score });
   }, []);
 
   const clearError = useCallback(() => setError(null), []);
@@ -394,22 +443,84 @@ export function useSocket() {
   }, [_applyBoardUpdates]);
   const clearStealAnimation = useCallback(() => setStealAnimation(null), []);
   const turnComplete = useCallback(() => {
-    socketRef.current?.emit('turn_complete', {});
+    emitRef.current('turn_complete', {});
   }, []);
   const endGame = useCallback(() => {
-    socketRef.current?.emit('end_game', {});
+    emitRef.current('end_game', {});
   }, []);
 
   const addCpuPlayer = useCallback(() => {
-    socketRef.current?.emit('add_cpu_player', {});
+    emitRef.current('add_cpu_player', {});
   }, []);
 
   const removeCpuPlayer = useCallback((playerId: string) => {
-    socketRef.current?.emit('remove_cpu_player', { playerId });
+    emitRef.current('remove_cpu_player', { playerId });
   }, []);
 
   const emitLobbyTap = useCallback((x: number, y: number) => {
-    socketRef.current?.emit('lobby_tap', { x, y });
+    emitRef.current('lobby_tap', { x, y });
+  }, []);
+
+  // ── Diagnostics snapshot ──────────────────────────────────────────────────
+  // Builds a JSON-serialisable object with recent event log, current UI
+  // state, and player info — enough context to debug multiplayer issues.
+  const gameStateRef = useRef(gameState);
+  gameStateRef.current = gameState;
+  const diceResultRef = useRef(diceResult);
+  diceResultRef.current = diceResult;
+  const tileEffectRef = useRef(tileEffect);
+  tileEffectRef.current = tileEffect;
+  const phaseStateRef = useRef(phase);
+  phaseStateRef.current = phase;
+  const activityFeedRef = useRef(activityFeed);
+  activityFeedRef.current = activityFeed;
+  const minigameResultsRef = useRef(minigameResults);
+  minigameResultsRef.current = minigameResults;
+
+  const getDiagnostics = useCallback(() => {
+    const gs = gameStateRef.current;
+    // Strip board tile data to keep size down — just include tile count
+    const gameStateSummary = gs ? {
+      sessionId: gs.sessionId,
+      state: gs.state,
+      targetMarbles: gs.targetMarbles,
+      turnOrder: gs.turnOrder,
+      currentTurnIndex: gs.currentTurnIndex,
+      currentTurnPlayerId: gs.currentTurnPlayerId,
+      turnNumber: gs.turnNumber,
+      winnerId: gs.winnerId,
+      boardTileCount: gs.board ? Object.keys(gs.board.tiles).length : 0,
+      players: Object.fromEntries(
+        Object.entries(gs.players).map(([id, p]) => {
+          const pl = p as PlayerState;
+          return [id, {
+            name: pl.name,
+            role: pl.role,
+            token: pl.token ? { id: pl.token.id, emoji: pl.token.emoji } : null,
+            currentTile: pl.currentTile,
+            marbles: pl.marbles,
+            points: pl.points,
+            isConnected: pl.isConnected,
+            isCpu: pl.isCpu,
+            modifiers: pl.modifiers,
+          }];
+        }),
+      ),
+    } : null;
+
+    return {
+      capturedAt: new Date().toISOString(),
+      playerId: playerIdRef.current,
+      phase: phaseStateRef.current,
+      gameState: gameStateSummary,
+      uiState: {
+        diceResult: diceResultRef.current,
+        tileEffect: tileEffectRef.current,
+        minigameResults: minigameResultsRef.current,
+      },
+      activityFeed: activityFeedRef.current.slice(-20),
+      eventLog: eventLogRef.current.slice(),
+    };
   }, []);
 
   return {
@@ -456,5 +567,6 @@ export function useSocket() {
     removeCpuPlayer,
     lobbyTap,
     emitLobbyTap,
+    getDiagnostics,
   };
 }
