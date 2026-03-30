@@ -111,6 +111,41 @@ export const SFX = {
     playTone(350 + Math.random() * 80, 0.06, 'sine', 0.08);
   },
 
+  /** Rising whoosh as token lifts off the starting tile. */
+  tileRise() {
+    const ctx = getCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = 300;
+    osc.frequency.exponentialRampToValueAtTime(800, ctx.currentTime + 0.25);
+    gain.gain.value = 0.15;
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.3);
+    // Airy noise layer
+    playNoise(0.15, 0.06);
+  },
+
+  /** Falling whoosh as token descends onto the destination tile. */
+  tileFall() {
+    const ctx = getCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = 700;
+    osc.frequency.exponentialRampToValueAtTime(250, ctx.currentTime + 0.2);
+    gain.gain.value = 0.15;
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.25);
+    playNoise(0.1, 0.05);
+  },
+
   /** Player lands on tile */
   tileLand() {
     playTone(440, 0.12, 'sine', 0.2);

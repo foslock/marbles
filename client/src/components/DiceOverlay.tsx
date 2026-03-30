@@ -60,7 +60,7 @@ interface DieState {
 }
 
 function makeDie(): DieState {
-  return { x: 0, y: 0, vx: 0, vy: 0, angle: 0, angularV: 0, face: 1, faceTimer: 0, settled: false, targetFace: null };
+  return { x: 0, y: 0, vx: 0, vy: 0, angle: 0, angularV: 0, face: 6, faceTimer: 0, settled: false, targetFace: null };
 }
 
 export function DiceOverlay({
@@ -120,16 +120,18 @@ export function DiceOverlay({
     const c = containerRef.current;
     if (!c) return;
     const count = diceCountRef.current;
+    // Position at 2/3 down (1/3 from bottom) so dice don't block the player token
+    const centerY = c.clientHeight * 2 / 3;
     if (count === 1) {
       diceRef.current[0].x = c.clientWidth / 2 - DIE_SIZE / 2;
-      diceRef.current[0].y = c.clientHeight / 2 - DIE_SIZE / 2;
+      diceRef.current[0].y = centerY - DIE_SIZE / 2;
     } else {
       const totalW = DIE_SIZE * 2 + DIE_GAP;
       const startX = c.clientWidth / 2 - totalW / 2;
       diceRef.current[0].x = startX;
-      diceRef.current[0].y = c.clientHeight / 2 - DIE_SIZE / 2;
+      diceRef.current[0].y = centerY - DIE_SIZE / 2;
       diceRef.current[1].x = startX + DIE_SIZE + DIE_GAP;
-      diceRef.current[1].y = c.clientHeight / 2 - DIE_SIZE / 2;
+      diceRef.current[1].y = centerY - DIE_SIZE / 2;
     }
   }, []);
 
@@ -156,6 +158,13 @@ export function DiceOverlay({
   // When rolledValue/diceValues arrive from server, set target faces
   useEffect(() => {
     if (diceValues && diceValues.length > 0) {
+      // If we're still in a non-idle phase from a previous roll (e.g. back-to-back
+      // turn_update + dice_rolled batched by React), reset first so the old dice
+      // state doesn't bleed through.
+      if (phaseRef.current !== 'idle') {
+        resetDice();
+      }
+
       // Set target faces for each die
       diceRef.current[0].targetFace = diceValues[0];
       if (diceValues.length >= 2) {
@@ -165,7 +174,7 @@ export function DiceOverlay({
       // Auto-roll when the dice belong to another player (use isMyRoll
       // instead of isActivePlayer so auto-roll triggers even when
       // displayedTurnPlayerId hasn't caught up yet).
-      if (!isMyRollRef.current && phaseRef.current === 'idle') {
+      if (!isMyRollRef.current) {
         const count = diceValues.length >= 2 ? 2 : 1;
         centerDice();
         for (let i = 0; i < count; i++) {

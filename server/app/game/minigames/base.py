@@ -36,7 +36,8 @@ def _make_config(minigame_type: str) -> dict:
             return {"seed": random.randint(0, 999999)}
         case "reaction":
             # Shared delay sequence so all players react to the same timings
-            delays = [random.randint(800, 2500) for _ in range(6)]
+            # Use shorter delays to fit at least 5-6 rounds in the duration
+            delays = [random.randint(600, 1800) for _ in range(8)]
             return {"delays": delays}
         case "accelerometer":
             return {"seed": random.randint(0, 999999)}
@@ -104,7 +105,7 @@ MINIGAMES = [
         "name": "Reaction Snap",
         "description": "Wait for it... TAP!",
         "instructions": "Wait for the screen to turn green, then tap as fast as possible. Fastest reaction wins!",
-        "duration": 5000,
+        "duration": 12000,
         "type": "reaction",
     },
     {
