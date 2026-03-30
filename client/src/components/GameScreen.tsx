@@ -63,6 +63,12 @@ export function GameScreen({
   onEndGame,
 }: Props) {
   const [showScoreboard, setShowScoreboard] = useState(false);
+  const [moveChosen, setMoveChosen] = useState(false);
+
+  // Reset moveChosen when diceResult changes (new turn / new roll)
+  useEffect(() => {
+    setMoveChosen(false);
+  }, [diceResult]);
 
   // ── Dice-settle gating ───────────────────────────────────────────────────
   // Buffer the move animation and tile selection until the dice overlay
@@ -71,14 +77,27 @@ export function GameScreen({
   const [activeMoveAnimation, setActiveMoveAnimation] = useState<MoveAnimation | null>(null);
   const movePendingRef = useRef<MoveAnimation | null>(null);
 
-  // When a new dice roll comes in, mark as unsettled
+  // When a new dice roll comes in, mark as unsettled.
+  // For non-active players, auto-settle after a timeout since the DiceOverlay
+  // might not be mounted (e.g. during other overlays) and would never fire
+  // onDiceSettled.
   useEffect(() => {
     if (diceResult) {
       setDiceSettled(false);
+      if (diceResult.playerId !== playerId) {
+        const timer = setTimeout(() => {
+          setDiceSettled(true);
+          if (movePendingRef.current) {
+            setActiveMoveAnimation(movePendingRef.current);
+            movePendingRef.current = null;
+          }
+        }, 2000);
+        return () => clearTimeout(timer);
+      }
     } else {
       setDiceSettled(true);
     }
-  }, [diceResult]);
+  }, [diceResult, playerId]);
 
   // When moveAnimation arrives, either pass through or buffer
   const diceSettledRef = useRef(true);
@@ -205,11 +224,12 @@ export function GameScreen({
     : null;
 
   const needsToChooseMove =
-    diceSettled && diceResult && diceResult.playerId === playerId && diceResult.reachableTiles.length > 0 && !diceResult.dizzy;
+    !moveChosen && diceSettled && diceResult && diceResult.playerId === playerId && diceResult.reachableTiles.length > 0 && !diceResult.dizzy;
 
   const handleChooseMove = (tileId: number) => {
     const tile = diceResult?.reachableTiles.find((t) => t.tileId === tileId);
     onChooseMove(tileId, tile?.path);
+    setMoveChosen(true);
   };
 
   const sortedPlayers = useMemo(() => {
@@ -282,7 +302,7 @@ export function GameScreen({
         <ActivityFeed items={activityFeed} />
 
         {/* Physics dice overlay — visible during active turns */}
-        {!effectToShow && !choiceToShow && !minigameResults && !activeMoveAnimation && !showScoreboard && (
+        {!moveChosen && !effectToShow && !choiceToShow && !minigameResults && !activeMoveAnimation && !showScoreboard && (
           <DiceOverlay
             isMyTurn={isMyTurn}
             isSpectator={isSpectator}

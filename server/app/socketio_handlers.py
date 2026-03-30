@@ -305,6 +305,236 @@ async def end_game(sid, data):
     await sio.close_room(session_id)
 
 
+## ── Shared turn-action functions ────────────────────────────────────────────
+# These are the core game-logic operations used by both human socket handlers
+# and CPU turns.  Handlers validate the caller, then delegate here.
+
+
+async def _do_roll_dice(session, player_id):
+    """Roll dice for player.  Emits dice_rolled to room.
+
+    Returns a dict: {type, roll, dice, reachable, dizzy, shortStop}
+    For advantage type, reachable is [] — caller must go through _do_choose_advantage.
+    """
+    player = session.players[player_id]
+
+    # ── Advantage roll ──────────────────────────────────────────────────────
+    if player.modifiers.get("advantage", 0) > 0:
+        roll1 = random.randint(1, 6)
+        roll2 = random.randint(1, 6)
+        player.modifiers["advantage"] -= 1
+        dice_info = {"roll": roll1, "dice": [roll1, roll2], "type": "advantage"}
+
+        await sio.emit("dice_rolled", {
+            "playerId": player_id,
+            "playerName": player.name,
+            **dice_info,
+            "reachableTiles": [],
+        }, room=session.id)
+        await _persist_event(session.id, session.turn_number, "roll", player_id, dice_info)
+        return {
+            "type": "advantage", "roll": roll1, "dice": [roll1, roll2],
+            "reachable": [], "dizzy": False, "shortStop": False,
+        }
+
+    # ── Double / Normal roll ────────────────────────────────────────────────
+    if player.modifiers.get("double_dice", 0) > 0:
+        roll1 = random.randint(1, 6)
+        roll2 = random.randint(1, 6)
+        roll = roll1 + roll2
+        player.modifiers["double_dice"] -= 1
+        dice_info = {"roll": roll, "dice": [roll1, roll2], "type": "double"}
+    else:
+        roll = random.randint(1, 6)
+        dice_info = {"roll": roll, "dice": [roll], "type": "normal"}
+
+    # Short stop: player can stop on any tile 1..N steps away
+    has_short_stop = player.modifiers.get("short_stop", 0) > 0
+    if has_short_stop:
+        reachable = []
+        seen_ids: set[int] = set()
+        for dist in range(1, roll + 1):
+            for tile_info in _get_reachable_tiles(session, player.current_tile, dist):
+                if tile_info["tileId"] not in seen_ids:
+                    seen_ids.add(tile_info["tileId"])
+                    reachable.append(tile_info)
+        player.modifiers["short_stop"] -= 1
+        dice_info["shortStop"] = True
+    else:
+        reachable = _get_reachable_tiles(session, player.current_tile, roll)
+
+    # Dizzy: server auto-picks a random destination
+    has_dizzy = player.modifiers.get("dizzy", 0) > 0
+    if has_dizzy:
+        player.modifiers["dizzy"] -= 1
+        dice_info["dizzy"] = True
+
+    await sio.emit("dice_rolled", {
+        "playerId": player_id,
+        "playerName": player.name,
+        **dice_info,
+        "reachableTiles": reachable,
+    }, room=session.id)
+
+    await _persist_event(session.id, session.turn_number, "roll", player_id, dice_info)
+
+    return {
+        "type": dice_info["type"], "roll": dice_info["roll"],
+        "dice": dice_info["dice"], "reachable": reachable,
+        "dizzy": has_dizzy, "shortStop": has_short_stop,
+    }
+
+
+async def _do_choose_advantage(session, player_id, chosen_roll):
+    """Process advantage die choice.  Emits advantage_chosen to room.
+
+    Returns dict: {reachable, dizzy}
+    """
+    player = session.players[player_id]
+
+    has_short_stop = player.modifiers.get("short_stop", 0) > 0
+    if has_short_stop:
+        reachable = []
+        seen_ids: set[int] = set()
+        for dist in range(1, chosen_roll + 1):
+            for tile_info in _get_reachable_tiles(session, player.current_tile, dist):
+                if tile_info["tileId"] not in seen_ids:
+                    seen_ids.add(tile_info["tileId"])
+                    reachable.append(tile_info)
+        player.modifiers["short_stop"] -= 1
+    else:
+        reachable = _get_reachable_tiles(session, player.current_tile, chosen_roll)
+
+    has_dizzy = player.modifiers.get("dizzy", 0) > 0
+    if has_dizzy:
+        player.modifiers["dizzy"] -= 1
+
+    await sio.emit("advantage_chosen", {
+        "playerId": player_id,
+        "roll": chosen_roll,
+        "reachableTiles": reachable,
+        "dizzy": has_dizzy,
+    }, room=session.id)
+
+    return {"reachable": reachable, "dizzy": has_dizzy}
+
+
+async def _do_choose_move(session, player_id, target_tile, path, dizzy=False):
+    """Move player to tile, check battle, process tile effect.
+
+    Emits player_moved and tile_effect.  Sets pending state for turn_complete.
+    Does NOT emit awaiting_choice — caller must handle that.
+    Returns the effect_result dict.
+    """
+    player = session.players[player_id]
+    from_tile = player.current_tile
+    player.current_tile = target_tile
+
+    move_payload = {
+        "playerId": player_id,
+        "playerName": player.name,
+        "tileId": target_tile,
+        "fromTile": from_tile,
+        "path": path,
+    }
+    if dizzy:
+        move_payload["dizzy"] = True
+
+    await sio.emit("player_moved", move_payload, room=session.id)
+
+    # ── Battle check ────────────────────────────────────────────────────────
+    battle = check_for_battle(session, player)
+    if battle:
+        await sio.emit("tile_effect", {
+            "playerId": player_id,
+            "playerName": player.name,
+            "type": "battle",
+            "category": "neutral",
+            "color": "neutral",
+            "message": battle["message"],
+        }, room=session.id)
+
+        await _persist_event(session.id, session.turn_number, "move", player_id, {
+            "from": from_tile, "to": target_tile, "effect": "battle",
+        })
+
+        session._pending_swap_tile_id = None
+        session._pending_turn_player_id = player_id
+        session._pending_turn_action = "battle"
+        session._pending_battle = battle
+        return {"type": "battle", "requiresChoice": False}
+
+    # ── Tile effect ─────────────────────────────────────────────────────────
+    effect_result = process_tile_effect(session, player)
+    await sio.emit("tile_effect", {
+        "playerId": player_id,
+        "playerName": player.name,
+        **effect_result,
+    }, room=session.id)
+
+    await _persist_event(session.id, session.turn_number, "move", player_id, {
+        "from": from_tile, "to": target_tile, "effect": effect_result.get("type"),
+    })
+
+    session._pending_swap_tile_id = target_tile
+    session._pending_turn_player_id = player_id
+    session._pending_turn_action = "swap"
+
+    return effect_result
+
+
+async def _do_make_choice(session, player_id, choice_type, target_id, amount=None):
+    """Apply a choice effect.  Emits choice_resolved to room.  Returns result dict."""
+    player = session.players[player_id]
+    result = apply_choice_effect(session, player, choice_type, target_id, amount)
+
+    await sio.emit("choice_resolved", {
+        "playerId": player_id,
+        "playerName": player.name,
+        **result,
+    }, room=session.id)
+
+    return result
+
+
+async def _do_turn_complete(session):
+    """Process pending turn completion: swap / battle / advance.
+
+    Called by the turn_complete socket handler and by CPU turns.
+    """
+    pending_player_id = getattr(session, "_pending_turn_player_id", None)
+    if not pending_player_id:
+        return
+
+    player = session.players.get(pending_player_id)
+    if not player:
+        return
+
+    action = getattr(session, "_pending_turn_action", None)
+
+    # Clear pending state
+    session._pending_turn_player_id = None
+    session._pending_turn_action = None
+
+    if action == "swap":
+        await _perform_tile_swap(session, pending_player_id)
+        await _end_and_send(session)
+    elif action == "battle":
+        pending_battle = getattr(session, "_pending_battle", None)
+        session._pending_battle = None
+        if pending_battle:
+            await _start_minigame(session, pending_battle)
+        else:
+            _end_turn(session)
+            await _send_turn_update(session)
+            await _persist_session(session)
+    elif action == "advance":
+        await _end_and_send(session)
+
+
+# ── Socket event handlers (thin wrappers around shared functions) ──────────
+
+
 @sio.event
 async def roll_dice(sid, data):
     """Player rolls the dice on their turn."""
@@ -321,117 +551,19 @@ async def roll_dice(sid, data):
         await sio.emit("error", {"message": "It's not your turn!"}, to=sid)
         return
 
-    player = session.players[player_id]
+    result = await _do_roll_dice(session, player_id)
 
-    # Determine dice behavior based on modifiers
-    if player.modifiers.get("advantage", 0) > 0:
-        roll1 = random.randint(1, 6)
-        roll2 = random.randint(1, 6)
-        player.modifiers["advantage"] -= 1
-        dice_info = {"roll": roll1, "dice": [roll1, roll2], "type": "advantage"}
+    if result["type"] == "advantage":
+        return  # Wait for choose_advantage event
 
-        # Advantage: player picks which die to use. Send both dice, no
-        # reachable tiles yet — wait for choose_advantage event.
-        await sio.emit("dice_rolled", {
-            "playerId": player_id,
-            "playerName": player.name,
-            **dice_info,
-            "reachableTiles": [],
-        }, room=session_id)
-        await _persist_event(session_id, session.turn_number, "roll", player_id, dice_info)
-        return
-
-    if player.modifiers.get("double_dice", 0) > 0:
-        roll1 = random.randint(1, 6)
-        roll2 = random.randint(1, 6)
-        roll = roll1 + roll2
-        player.modifiers["double_dice"] -= 1
-        dice_info = {"roll": roll, "dice": [roll1, roll2], "type": "double"}
-    else:
-        roll = random.randint(1, 6)
-        dice_info = {"roll": roll, "dice": [roll], "type": "normal"}
-
-    # Check short_stop modifier: player can stop on any tile 1..N steps away
-    has_short_stop = player.modifiers.get("short_stop", 0) > 0
-    if has_short_stop:
-        reachable = []
-        seen_ids: set[int] = set()
-        for dist in range(1, roll + 1):
-            for tile_info in _get_reachable_tiles(session, player.current_tile, dist):
-                if tile_info["tileId"] not in seen_ids:
-                    seen_ids.add(tile_info["tileId"])
-                    reachable.append(tile_info)
-        player.modifiers["short_stop"] -= 1
-        dice_info["shortStop"] = True
-    else:
-        reachable = _get_reachable_tiles(session, player.current_tile, roll)
-
-    # Check dizzy modifier: server auto-picks a random destination
-    has_dizzy = player.modifiers.get("dizzy", 0) > 0
-    if has_dizzy:
-        player.modifiers["dizzy"] -= 1
-        dice_info["dizzy"] = True
-
-    await sio.emit("dice_rolled", {
-        "playerId": player_id,
-        "playerName": player.name,
-        **dice_info,
-        "reachableTiles": reachable,
-    }, room=session_id)
-
-    await _persist_event(session_id, session.turn_number, "roll", player_id, dice_info)
-
-    # If dizzy, auto-move to a random reachable tile after a short delay
-    if has_dizzy and reachable:
-        await asyncio.sleep(1.5)  # Let dice animation play
-        chosen = random.choice(reachable)
-        from_tile = player.current_tile
-        player.current_tile = chosen["tileId"]
-
-        await sio.emit("player_moved", {
-            "playerId": player_id,
-            "playerName": player.name,
-            "tileId": chosen["tileId"],
-            "fromTile": from_tile,
-            "path": chosen["path"],
-            "dizzy": True,
-        }, room=session_id)
-
-        # Process tile effect and battles (same as choose_move)
-        battle = check_for_battle(session, player)
-        if battle:
-            await sio.emit("tile_effect", {
-                "playerId": player_id,
-                "playerName": player.name,
-                "type": "battle",
-                "category": "neutral",
-                "color": "neutral",
-                "message": battle["message"],
-            }, room=session_id)
-            await _persist_event(session_id, session.turn_number, "move", player_id, {
-                "from": from_tile, "to": chosen["tileId"], "effect": "battle",
-            })
-            session._pending_swap_tile_id = None
-            session._pending_turn_player_id = player_id
-            session._pending_turn_action = "battle"
-            session._pending_battle = battle
-            return
-
-        effect_result = process_tile_effect(session, player)
-        await sio.emit("tile_effect", {
-            "playerId": player_id,
-            "playerName": player.name,
-            **effect_result,
-        }, room=session_id)
-        await _persist_event(session_id, session.turn_number, "move", player_id, {
-            "from": from_tile, "to": chosen["tileId"], "effect": effect_result.get("type"),
-        })
-        session._pending_swap_tile_id = chosen["tileId"]
-        session._pending_turn_player_id = player_id
-        session._pending_turn_action = "swap"
-
+    # If dizzy, auto-move to a random reachable tile
+    if result["dizzy"] and result["reachable"]:
+        await asyncio.sleep(1.5)
+        chosen = random.choice(result["reachable"])
+        effect_result = await _do_choose_move(
+            session, player_id, chosen["tileId"], chosen["path"], dizzy=True,
+        )
         if effect_result.get("requiresChoice"):
-            # For dizzy human players, still let them choose the target
             await sio.emit("awaiting_choice", {
                 "playerId": player_id,
                 **effect_result,
@@ -457,76 +589,15 @@ async def choose_advantage(sid, data):
     if not isinstance(chosen_roll, int) or chosen_roll < 1 or chosen_roll > 6:
         return
 
-    player = session.players[player_id]
-
-    # Compute reachable tiles for the chosen roll (with short_stop if active)
-    has_short_stop = player.modifiers.get("short_stop", 0) > 0
-    if has_short_stop:
-        reachable = []
-        seen_ids: set[int] = set()
-        for dist in range(1, chosen_roll + 1):
-            for tile_info in _get_reachable_tiles(session, player.current_tile, dist):
-                if tile_info["tileId"] not in seen_ids:
-                    seen_ids.add(tile_info["tileId"])
-                    reachable.append(tile_info)
-        player.modifiers["short_stop"] -= 1
-    else:
-        reachable = _get_reachable_tiles(session, player.current_tile, chosen_roll)
-
-    # Check dizzy modifier
-    has_dizzy = player.modifiers.get("dizzy", 0) > 0
-    if has_dizzy:
-        player.modifiers["dizzy"] -= 1
-
-    await sio.emit("advantage_chosen", {
-        "playerId": player_id,
-        "roll": chosen_roll,
-        "reachableTiles": reachable,
-        "dizzy": has_dizzy,
-    }, room=session_id)
+    result = await _do_choose_advantage(session, player_id, chosen_roll)
 
     # If dizzy, auto-move to a random reachable tile
-    if has_dizzy and reachable:
+    if result["dizzy"] and result["reachable"]:
         await asyncio.sleep(1.5)
-        chosen = random.choice(reachable)
-        from_tile = player.current_tile
-        player.current_tile = chosen["tileId"]
-
-        await sio.emit("player_moved", {
-            "playerId": player_id,
-            "playerName": player.name,
-            "tileId": chosen["tileId"],
-            "fromTile": from_tile,
-            "path": chosen["path"],
-            "dizzy": True,
-        }, room=session_id)
-
-        battle = check_for_battle(session, player)
-        if battle:
-            await sio.emit("tile_effect", {
-                "playerId": player_id,
-                "playerName": player.name,
-                "type": "battle",
-                "category": "neutral",
-                "color": "neutral",
-                "message": battle["message"],
-            }, room=session_id)
-            session._pending_swap_tile_id = None
-            session._pending_turn_player_id = player_id
-            session._pending_turn_action = "battle"
-            session._pending_battle = battle
-            return
-
-        effect_result = process_tile_effect(session, player)
-        await sio.emit("tile_effect", {
-            "playerId": player_id,
-            "playerName": player.name,
-            **effect_result,
-        }, room=session_id)
-        session._pending_swap_tile_id = chosen["tileId"]
-        session._pending_turn_player_id = player_id
-        session._pending_turn_action = "swap"
-
+        chosen = random.choice(result["reachable"])
+        effect_result = await _do_choose_move(
+            session, player_id, chosen["tileId"], chosen["path"], dizzy=True,
+        )
         if effect_result.get("requiresChoice"):
             await sio.emit("awaiting_choice", {
                 "playerId": player_id,
@@ -548,71 +619,14 @@ async def choose_move(sid, data):
 
     target_tile = data.get("tileId")
     path = data.get("path", [])
-    player = session.players[player_id]
-    from_tile = player.current_tile
-    player.current_tile = target_tile
 
-    await sio.emit("player_moved", {
-        "playerId": player_id,
-        "playerName": player.name,
-        "tileId": target_tile,
-        "fromTile": from_tile,
-        "path": path,
-    }, room=session_id)
+    effect_result = await _do_choose_move(session, player_id, target_tile, path)
 
-    # Check if another player is already on this tile — if so, skip tile
-    # effect entirely and go straight to minigame.
-    battle = check_for_battle(session, player)
-    if battle:
-        # No tile effect, no swap — just emit a neutral "battle" tile_effect
-        # so the client knows the move resolved, then start the minigame.
-        await sio.emit("tile_effect", {
-            "playerId": player_id,
-            "playerName": player.name,
-            "type": "battle",
-            "category": "neutral",
-            "color": "neutral",
-            "message": battle["message"],
-        }, room=session_id)
-
-        await _persist_event(session_id, session.turn_number, "move", player_id, {
-            "from": from_tile, "to": target_tile, "effect": "battle",
-        })
-
-        # Store pending state — after the tile effect overlay is dismissed,
-        # the battle/minigame will start via turn_complete.
-        session._pending_swap_tile_id = None  # no swap for battles
-        session._pending_turn_player_id = player_id
-        session._pending_turn_action = "battle"
-        session._pending_battle = battle
-        return
-
-    # Process tile effect (swap is deferred to end of turn)
-    effect_result = process_tile_effect(session, player)
-    await sio.emit("tile_effect", {
-        "playerId": player_id,
-        "playerName": player.name,
-        **effect_result,
-    }, room=session_id)
-
-    await _persist_event(session_id, session.turn_number, "move", player_id, {
-        "from": from_tile, "to": target_tile, "effect": effect_result.get("type"),
-    })
-
-    # Store pending swap tile for end-of-turn processing
-    session._pending_swap_tile_id = target_tile
-    session._pending_turn_player_id = player_id
-    session._pending_turn_action = "swap"
-
-    # If effect requires a choice, wait for it (then turn_complete after choice)
     if effect_result.get("requiresChoice"):
         await sio.emit("awaiting_choice", {
             "playerId": player_id,
             **effect_result,
         }, to=sid)
-        return
-
-    # Don't advance turn yet — wait for client's turn_complete signal
 
 
 @sio.event
@@ -627,20 +641,11 @@ async def make_choice(sid, data):
     if not session:
         return
 
-    player = session.players[player_id]
     choice_type = data.get("choiceType")
     target_id = data.get("targetId")
     amount = data.get("amount")
 
-    result = apply_choice_effect(session, player, choice_type, target_id, amount)
-
-    await sio.emit("choice_resolved", {
-        "playerId": player_id,
-        "playerName": player.name,
-        **result,
-    }, room=session_id)
-
-    # Don't advance turn yet — wait for client's turn_complete signal
+    await _do_make_choice(session, player_id, choice_type, target_id, amount)
 
 
 @sio.event
@@ -655,39 +660,7 @@ async def turn_complete(sid, data):
     if not session or session.state != "playing":
         return
 
-    pending_player_id = getattr(session, "_pending_turn_player_id", None)
-    if not pending_player_id:
-        return  # No pending turn completion
-
-    player = session.players.get(pending_player_id)
-    if not player:
-        return
-
-    action = getattr(session, "_pending_turn_action", None)
-
-    # Clear pending state
-    session._pending_turn_player_id = None
-    session._pending_turn_action = None
-
-    if action == "swap":
-        # After tile effect dismissed: perform swap, then end turn
-        # (no battle check needed — choose_move already confirmed no collision)
-        await _perform_tile_swap(session, pending_player_id)
-        await _end_and_send(session)
-    elif action == "battle":
-        # After battle notification dismissed: start the minigame directly
-        pending_battle = getattr(session, "_pending_battle", None)
-        session._pending_battle = None
-        if pending_battle:
-            await _start_minigame(session, pending_battle)
-        else:
-            # Fallback: no battle data, just advance
-            _end_turn(session)
-            await _send_turn_update(session)
-            await _persist_session(session)
-    elif action == "advance":
-        # After minigame results dismissed: just advance the turn
-        await _end_and_send(session)
+    await _do_turn_complete(session)
 
 
 @sio.event
@@ -830,20 +803,6 @@ async def _start_minigame(session, battle):
             await _send_turn_update(session)
 
 
-async def _check_battle_and_end_turn(session, player):
-    """Check for tile collisions triggering a minigame, then end turn.
-
-    Used by CPU turns where the battle check hasn't been done yet.
-    Human turns pre-check for battles in choose_move.
-    """
-    battle = check_for_battle(session, player)
-    if battle:
-        await _start_minigame(session, battle)
-        return
-
-    await _end_and_send(session)
-
-
 async def _end_and_send(session):
     """Check for winner, then advance turn and notify clients."""
     winner = session.check_winner()
@@ -885,11 +844,14 @@ async def _run_cpu_turn_task(session, player):
     """Wrapper that runs a CPU turn as a background task."""
     try:
         await run_cpu_turn(
-            sio,
             session,
             player,
-            _get_reachable_tiles,
-            _check_battle_and_end_turn,
+            do_roll_dice=_do_roll_dice,
+            do_choose_advantage=_do_choose_advantage,
+            do_choose_move=_do_choose_move,
+            do_make_choice=_do_make_choice,
+            do_turn_complete=_do_turn_complete,
+            end_and_send=_end_and_send,
         )
     except Exception as e:
         logger.error(f"CPU turn error for {player.name}: {e}", exc_info=True)
