@@ -79,6 +79,7 @@ export default function App() {
           onAddCpu={socket.addCpuPlayer}
           onRemoveCpu={socket.removeCpuPlayer}
           onUpdateTargetMarbles={socket.updateTargetMarbles}
+          onUpdateCpuSpeed={socket.updateCpuSpeed}
           lobbyTap={socket.lobbyTap}
           onLobbyTap={socket.emitLobbyTap}
         />

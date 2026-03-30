@@ -16,6 +16,7 @@ interface Props {
   onAddCpu: () => void;
   onRemoveCpu: (playerId: string) => void;
   onUpdateTargetMarbles: (value: number) => void;
+  onUpdateCpuSpeed: (speed: string) => void;
   lobbyTap: { playerId: string; emoji: string; x: number; y: number } | null;
   onLobbyTap: (x: number, y: number) => void;
 }
@@ -24,10 +25,11 @@ interface Props {
 // own permission prompt when the lobby already handled it this session.
 export let lobbyMotionGranted = false;
 
-export function LobbyScreen({ lobby, playerId, onStartGame, onAddCpu, onRemoveCpu, onUpdateTargetMarbles, lobbyTap, onLobbyTap }: Props) {
+export function LobbyScreen({ lobby, playerId, onStartGame, onAddCpu, onRemoveCpu, onUpdateTargetMarbles, onUpdateCpuSpeed, lobbyTap, onLobbyTap }: Props) {
   const isHost = playerId === lobby.hostId;
   const players = lobby.players.filter((p) => p.role === 'player');
   const spectators = lobby.players.filter((p) => p.role === 'spectator');
+  const hasCpuPlayers = players.some((p) => p.isCpu);
 
   // Floating emoji state
   const [floatingEmojis, setFloatingEmojis] = useState<FloatingEmoji[]>([]);
@@ -203,6 +205,34 @@ export function LobbyScreen({ lobby, playerId, onStartGame, onAddCpu, onRemoveCp
           <span style={styles.settingLabel}>Target: {lobby.targetMarbles} marbles</span>
         )}
       </div>
+
+      {hasCpuPlayers && (
+        <div style={styles.settings}>
+          {isHost ? (
+            <div style={styles.settingRow}>
+              <span style={styles.settingLabel}>CPU Speed:</span>
+              <div style={styles.speedToggle}>
+                {(['slow', 'normal', 'fast'] as const).map((speed) => (
+                  <button
+                    key={speed}
+                    style={{
+                      ...styles.speedBtn,
+                      ...(lobby.cpuSpeed === speed ? styles.speedBtnActive : {}),
+                    }}
+                    onClick={() => onUpdateCpuSpeed(speed)}
+                  >
+                    {speed.charAt(0).toUpperCase() + speed.slice(1)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <span style={styles.settingLabel}>
+              CPU Speed: {lobby.cpuSpeed.charAt(0).toUpperCase() + lobby.cpuSpeed.slice(1)}
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Motion permission banner — shown to iOS players before the game starts */}
       {showMotionPrompt && (
@@ -455,6 +485,25 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '14px', fontWeight: 700, cursor: 'pointer', flexShrink: 0,
   },
   motionBtnDisabled: { background: '#233554', color: '#5a6a8a', cursor: 'default' },
+  speedToggle: {
+    display: 'flex',
+    gap: '4px',
+  },
+  speedBtn: {
+    padding: '6px 14px',
+    fontSize: '13px',
+    fontWeight: 600,
+    border: '1px solid #233554',
+    borderRadius: '8px',
+    background: 'transparent',
+    color: '#8892b0',
+    cursor: 'pointer',
+  },
+  speedBtnActive: {
+    background: '#3498db',
+    color: '#fff',
+    borderColor: '#3498db',
+  },
   removeCpuButton: {
     width: '26px',
     height: '26px',

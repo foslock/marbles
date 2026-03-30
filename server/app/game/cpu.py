@@ -41,6 +41,15 @@ def cpu_minigame_score(minigame_type: str) -> int:
     return random.randint(lo, hi)
 
 
+_SPEED_OFFSET = {"fast": 0.0, "normal": 1.0, "slow": 2.0}
+
+
+async def _cpu_sleep(lo: float, hi: float, speed: str):
+    """Sleep for a random duration, offset by the CPU speed setting."""
+    offset = _SPEED_OFFSET.get(speed, 0.0)
+    await asyncio.sleep(random.uniform(lo + offset, hi + offset))
+
+
 async def run_cpu_turn(session, player, *,
                        do_roll_dice, do_choose_advantage, do_choose_move,
                        do_make_choice, do_turn_complete, end_and_send):
@@ -51,16 +60,18 @@ async def run_cpu_turn(session, player, *,
       2. Calls the same _do_* functions that human socket handlers call
       3. Makes decisions (which die, which tile, which target) automatically
     """
+    speed = getattr(session, "cpu_speed", "fast")
+
     # Thinking pause before rolling — must be long enough for the turn banner
     # animation to slide in on the client (~400 ms) plus a visible hold.
-    await asyncio.sleep(random.uniform(1.5, 2.5))
+    await _cpu_sleep(1.5, 2.5, speed)
 
     # ── Roll dice ───────────────────────────────────────────────────────────
     roll_result = await do_roll_dice(session, player.id)
 
     if roll_result["type"] == "advantage":
         # CPU always picks the higher die
-        await asyncio.sleep(random.uniform(0.8, 2.5))
+        await _cpu_sleep(0.8, 2.5, speed)
         chosen_roll = max(roll_result["dice"])
         adv_result = await do_choose_advantage(session, player.id, chosen_roll)
         reachable = adv_result["reachable"]
@@ -71,17 +82,17 @@ async def run_cpu_turn(session, player, *,
 
     # ── Handle dizzy auto-move ──────────────────────────────────────────────
     if is_dizzy and reachable:
-        await asyncio.sleep(random.uniform(0.8, 2.5))
+        await _cpu_sleep(0.8, 2.5, speed)
         chosen = random.choice(reachable)
         effect_result = await do_choose_move(
             session, player.id, chosen["tileId"], chosen["path"], dizzy=True,
         )
         if effect_result.get("requiresChoice"):
-            await asyncio.sleep(random.uniform(0.8, 2.5))
+            await _cpu_sleep(0.8, 2.5, speed)
             _cpu_handle_choice(effect_result, session, player, do_make_choice)
-            await asyncio.sleep(random.uniform(0.8, 2.5))
+            await _cpu_sleep(0.8, 2.5, speed)
         # Wait for clients to see the effect overlay, then complete turn
-        await asyncio.sleep(random.uniform(0.8, 2.5))
+        await _cpu_sleep(0.8, 2.5, speed)
         await do_turn_complete(session)
         return
 
@@ -95,7 +106,7 @@ async def run_cpu_turn(session, player, *,
         return
 
     # ── Choose a tile ───────────────────────────────────────────────────────
-    await asyncio.sleep(random.uniform(0.8, 2.5))
+    await _cpu_sleep(0.8, 2.5, speed)
 
     chosen = _choose_tile(reachable, session, player)
     effect_result = await do_choose_move(
@@ -104,11 +115,11 @@ async def run_cpu_turn(session, player, *,
 
     # ── Handle effects that require a choice ────────────────────────────────
     if effect_result.get("requiresChoice"):
-        await asyncio.sleep(random.uniform(0.8, 2.5))
+        await _cpu_sleep(0.8, 2.5, speed)
         await _cpu_handle_choice(effect_result, session, player, do_make_choice)
 
     # ── Wait for clients to see the effect overlay, then complete turn ──────
-    await asyncio.sleep(random.uniform(0.8, 2.5))
+    await _cpu_sleep(0.8, 2.5, speed)
     await do_turn_complete(session)
 
 

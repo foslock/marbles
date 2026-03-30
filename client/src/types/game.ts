@@ -50,6 +50,7 @@ export interface LobbyData {
   hostId: string;
   state: string;
   targetMarbles: number;
+  cpuSpeed: 'slow' | 'normal' | 'fast';
   players: {
     id: string;
     name: string;

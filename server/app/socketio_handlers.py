@@ -181,6 +181,26 @@ async def update_target_marbles(sid, data):
 
 
 @sio.event
+async def update_cpu_speed(sid, data):
+    """Host adjusts the CPU player speed while in the lobby."""
+    lookup = session_manager.sid_to_player.get(sid)
+    if not lookup:
+        return
+    session_id, player_id = lookup
+    session = session_manager.sessions.get(session_id)
+    if not session or session.state != "lobby":
+        return
+    if player_id != session.host_id:
+        await sio.emit("error", {"message": "Only the host can change settings."}, to=sid)
+        return
+    value = data.get("cpuSpeed")
+    if value not in ("slow", "normal", "fast"):
+        return
+    session.cpu_speed = value
+    await sio.emit("lobby_update", session.to_lobby_dict(), room=session.id)
+
+
+@sio.event
 async def reconnect_session(sid, data):
     """Player reconnects to an in-progress session."""
     passphrase = data.get("passphrase", "").strip().lower()
