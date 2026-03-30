@@ -133,11 +133,12 @@ export function HomeScreen({ connected, onCreateSession, onJoinSession, globalSt
   const [role, setRole] = useState<'player' | 'spectator'>('player');
   const [showHowToPlay, setShowHowToPlay] = useState(false);
 
-  // Request global stats when connected and on home screen
+  // Poll global stats every second while connected and on home screen
   useEffect(() => {
-    if (connected && mode === 'menu') {
-      onRequestGlobalStats();
-    }
+    if (!connected || mode !== 'menu') return;
+    onRequestGlobalStats();
+    const interval = setInterval(onRequestGlobalStats, 1000);
+    return () => clearInterval(interval);
   }, [connected, mode, onRequestGlobalStats]);
 
   // Playtest state

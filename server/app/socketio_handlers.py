@@ -445,15 +445,20 @@ async def lobby_tap(sid, data):
     }, room=session_id, skip_sid=sid)
 
 
-@sio.event
-async def get_global_stats(sid, data):
-    """Return aggregate marbles and points across all sessions (in-memory + DB)."""
-    # Start with in-memory stats
-    mem_stats = session_manager.get_all_player_stats()
-    total_marbles = mem_stats["totalMarbles"]
-    total_points = mem_stats["totalPoints"]
+# Cached DB stats for global_stats polling (refreshed every 30s)
+_db_stats_cache: dict = {"totalMarbles": 0, "totalPoints": 0}
+_db_stats_cache_time: float = 0
+_DB_STATS_TTL: float = 30.0
 
-    # Add historical stats from DB (finished sessions not in memory)
+
+async def _get_db_stats() -> dict:
+    """Return cached DB stats, refreshing if stale."""
+    global _db_stats_cache, _db_stats_cache_time
+    import time
+    now = time.monotonic()
+    if now - _db_stats_cache_time < _DB_STATS_TTL:
+        return _db_stats_cache
+
     try:
         from .database import async_session as db_session_maker
         from sqlalchemy import select, func
@@ -461,7 +466,6 @@ async def get_global_stats(sid, data):
         from .models.session import LtmSession
 
         async with db_session_maker() as db:
-            # Get stats from DB sessions that are NOT currently in memory
             in_memory_ids = list(session_manager.sessions.keys())
             query = (
                 select(
@@ -475,14 +479,23 @@ async def get_global_stats(sid, data):
                 query = query.where(LtmSession.id.notin_(in_memory_ids))
             result = await db.execute(query)
             row = result.one()
-            total_marbles += int(row[0])
-            total_points += int(row[1])
+            _db_stats_cache = {"totalMarbles": int(row[0]), "totalPoints": int(row[1])}
+            _db_stats_cache_time = now
     except Exception as e:
         logger.warning(f"Failed to fetch DB stats: {e}")
 
+    return _db_stats_cache
+
+
+@sio.event
+async def get_global_stats(sid, data):
+    """Return aggregate marbles and points across all sessions (in-memory + DB)."""
+    mem_stats = session_manager.get_all_player_stats()
+    db_stats = await _get_db_stats()
+
     await sio.emit("global_stats", {
-        "totalMarbles": total_marbles,
-        "totalPoints": total_points,
+        "totalMarbles": mem_stats["totalMarbles"] + db_stats["totalMarbles"],
+        "totalPoints": mem_stats["totalPoints"] + db_stats["totalPoints"],
     }, to=sid)
 
 
