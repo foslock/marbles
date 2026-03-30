@@ -51,8 +51,9 @@ async def run_cpu_turn(session, player, *,
       2. Calls the same _do_* functions that human socket handlers call
       3. Makes decisions (which die, which tile, which target) automatically
     """
-    # Thinking pause before rolling
-    await asyncio.sleep(random.uniform(0.8, 2.5))
+    # Thinking pause before rolling — must be long enough for the turn banner
+    # animation to slide in on the client (~400 ms) plus a visible hold.
+    await asyncio.sleep(random.uniform(1.5, 2.5))
 
     # ── Roll dice ───────────────────────────────────────────────────────────
     roll_result = await do_roll_dice(session, player.id)
