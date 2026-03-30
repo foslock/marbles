@@ -5,6 +5,8 @@ import { Haptics } from '../utils/haptics';
 interface Props {
   /** When true the die is interactive (flick to roll). */
   isMyTurn: boolean;
+  /** True when the current diceResult belongs to this player (for auto-roll gating). */
+  isMyRoll: boolean;
   /** True when the viewer is a spectator (sees rolls, never sees prompt). */
   isSpectator?: boolean;
   /** After server responds, the final face to land on. null = not rolled yet. */
@@ -62,7 +64,7 @@ function makeDie(): DieState {
 }
 
 export function DiceOverlay({
-  isMyTurn, isSpectator, rolledValue, diceValues, diceType,
+  isMyTurn, isMyRoll, isSpectator, rolledValue, diceValues, diceType,
   hasDoubleDice, hasAdvantage,
   onRoll, onChooseAdvantage, onDiceSettled,
 }: Props) {
@@ -95,6 +97,8 @@ export function DiceOverlay({
   const settledFiredRef = useRef(false);
   const isMyTurnRef = useRef(isMyTurn);
   isMyTurnRef.current = isMyTurn;
+  const isMyRollRef = useRef(isMyRoll);
+  isMyRollRef.current = isMyRoll;
   const isSpectatorRef = useRef(!!isSpectator);
   isSpectatorRef.current = !!isSpectator;
   const onDiceSettledRef = useRef(onDiceSettled);
@@ -158,8 +162,10 @@ export function DiceOverlay({
         diceRef.current[1].targetFace = diceValues[1];
       }
 
-      // Auto-roll for non-active player / spectator
-      if (!isActivePlayer() && phaseRef.current === 'idle') {
+      // Auto-roll when the dice belong to another player (use isMyRoll
+      // instead of isActivePlayer so auto-roll triggers even when
+      // displayedTurnPlayerId hasn't caught up yet).
+      if (!isMyRollRef.current && phaseRef.current === 'idle') {
         const count = diceValues.length >= 2 ? 2 : 1;
         centerDice();
         for (let i = 0; i < count; i++) {
