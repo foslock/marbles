@@ -63,7 +63,12 @@ export function MinigameScreen({ minigameInfo, playerId, onSubmitScore }: Props)
   }, [phase, minigame.id, onSubmitScore]);
 
   const handleScoreUpdate = (score: number) => {
-    scoreRef.current = score;
+    // Always keep the best score — games with retry (TowerBuilder,
+    // MarbleRunner) reset to 0 on restart, and PumpIt's score can
+    // decrease from air leak. We want the peak performance submitted.
+    if (score > scoreRef.current) {
+      scoreRef.current = score;
+    }
   };
 
   // Look up the game component from the registry, fall back to TapFrenzy
