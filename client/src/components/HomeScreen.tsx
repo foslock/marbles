@@ -273,7 +273,7 @@ export function HomeScreen({ connected, onCreateSession, onJoinSession, globalSt
               Playtest Minigames
             </button>
           </div>
-          {globalStats && (globalStats.totalMarbles > 0 || globalStats.totalPoints > 0) && (
+          {globalStats && (
             <div style={styles.globalStats}>
               {globalStats.totalMarbles} marbles and {globalStats.totalPoints.toLocaleString()} points collected
             </div>
