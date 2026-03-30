@@ -134,6 +134,8 @@ export function GameScreen({
   // also `activeMoveAnimation` (the dice-settle-gated version).
   const effectPendingRef = useRef<TileEffect | null>(null);
   const [effectToShow, setEffectToShow] = useState<TileEffect | null>(null);
+  const effectToShowRef = useRef<TileEffect | null>(null);
+  effectToShowRef.current = effectToShow;
 
   useEffect(() => {
     if (!tileEffect) {
@@ -196,24 +198,47 @@ export function GameScreen({
     onTurnComplete();
   }, [onClearTileEffect, onTurnComplete]);
 
+  // For choice effects (steal/give), the steal animation completing is the
+  // trigger for turn completion — no separate tile effect overlay is shown.
+  const handleClearStealAnimation = useCallback(() => {
+    onClearStealAnimation();
+    if (effectToShowRef.current?.requiresChoice) {
+      setEffectToShow(null);
+      onClearTileEffect();
+      onTurnComplete();
+    }
+  }, [onClearStealAnimation, onClearTileEffect, onTurnComplete]);
+
   // ── Activity item for tile effects (posted after movement completes) ─────
   useEffect(() => {
-    if (effectToShow && effectToShow.message && !effectToShow.requiresChoice) {
-      const color: ActivityItem['color'] =
-        effectToShow.color === 'green' ? 'green' : effectToShow.color === 'red' ? 'red' : 'neutral';
-      onAddActivityItem(`${effectToShow.playerName}: ${effectToShow.message}`, color);
-      if (effectToShow.autoMarbles) {
-        onAddActivityItem(`\uD83D\uDD2E ${effectToShow.playerName} earned ${effectToShow.autoMarbles} marble from points!`, 'gold');
-      }
-      // Non-active players don't see the popup overlay, so auto-clear the effect
-      // immediately.  Do NOT call onTurnComplete here — only the active player
-      // should signal turn completion after dismissing their popup.  Sending it
-      // from non-active clients causes the tile-swap animation + dice prompt to
-      // appear prematurely before the active player has even seen their effect.
+    if (!effectToShow || !effectToShow.message) return;
+
+    // Choice effects (steal/give) don't use the tile effect overlay — their
+    // activity items are added by the choice_resolved handler instead.
+    // Non-active players should auto-clear choice effects immediately so they
+    // don't block displayedTurnPlayerId updates.
+    if (effectToShow.requiresChoice) {
       if (effectToShow.playerId !== playerId) {
         setEffectToShow(null);
         onClearTileEffect();
       }
+      return;
+    }
+
+    const color: ActivityItem['color'] =
+      effectToShow.color === 'green' ? 'green' : effectToShow.color === 'red' ? 'red' : 'neutral';
+    onAddActivityItem(`${effectToShow.playerName}: ${effectToShow.message}`, color);
+    if (effectToShow.autoMarbles) {
+      onAddActivityItem(`\uD83D\uDD2E ${effectToShow.playerName} earned ${effectToShow.autoMarbles} marble from points!`, 'gold');
+    }
+    // Non-active players don't see the popup overlay, so auto-clear the effect
+    // immediately.  Do NOT call onTurnComplete here — only the active player
+    // should signal turn completion after dismissing their popup.  Sending it
+    // from non-active clients causes the tile-swap animation + dice prompt to
+    // appear prematurely before the active player has even seen their effect.
+    if (effectToShow.playerId !== playerId) {
+      setEffectToShow(null);
+      onClearTileEffect();
     }
   }, [effectToShow]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -254,7 +279,8 @@ export function GameScreen({
     }
 
     // Active player is reading their tile effect popup — not waiting on input
-    if (effectToShow && effectToShow.playerId === displayedTurnPlayerId) return null;
+    // (Skip this for choice effects — they don't show the tile effect overlay)
+    if (effectToShow && effectToShow.playerId === displayedTurnPlayerId && !effectToShow.requiresChoice) return null;
 
     // Dice rolled with reachable tiles — waiting to pick a destination
     if (diceResult && !moveChosen && diceResult.reachableTiles.length > 0 && !diceResult.dizzy) {
@@ -341,7 +367,7 @@ export function GameScreen({
             tileSwapAnimation={tileSwapAnimation}
             onSwapAnimationComplete={onClearTileSwapAnimation}
             stealAnimation={stealAnimation}
-            onStealAnimationComplete={onClearStealAnimation}
+            onStealAnimationComplete={handleClearStealAnimation}
             activePlayerWaitState={activePlayerWaitState}
           />
         )}
@@ -398,8 +424,9 @@ export function GameScreen({
         </div>
       )}
 
-      {/* Effect overlays — only show for the active player (or if stolen from) */}
-      {effectToShow && effectToShow.playerId === playerId && (
+      {/* Effect overlays — only show for the active player; skip choice effects
+          (steal/give) since those use the choice overlay + steal animation instead. */}
+      {effectToShow && effectToShow.playerId === playerId && !effectToShow.requiresChoice && (
         <TileEffectOverlay
           effect={effectToShow}
           playerToken={effectPlayerToken}
