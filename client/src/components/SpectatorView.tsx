@@ -121,6 +121,7 @@ export function SpectatorView({
           tileSwapAnimation={tileSwapAnimation}
           onSwapAnimationComplete={onClearTileSwapAnimation}
           initialScale={1}
+          isSpectator
         />
 
         {/* Activity feed — bottom-left, tappable to expand full history */}
