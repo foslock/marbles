@@ -1,21 +1,62 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { LobbyData } from '../types/game';
+
+interface FloatingEmoji {
+  id: number;
+  x: number;
+  y: number;
+  emoji: string;
+  fading: boolean;
+}
 
 interface Props {
   lobby: LobbyData;
   playerId: string | null;
   onStartGame: () => void;
   onAddCpu: () => void;
+  onRemoveCpu: (playerId: string) => void;
+  lobbyTap: { playerId: string; emoji: string; x: number; y: number } | null;
+  onLobbyTap: (x: number, y: number) => void;
 }
 
 // Module-level flag shared with TiltChase so the in-game component skips its
 // own permission prompt when the lobby already handled it this session.
 export let lobbyMotionGranted = false;
 
-export function LobbyScreen({ lobby, playerId, onStartGame, onAddCpu }: Props) {
+export function LobbyScreen({ lobby, playerId, onStartGame, onAddCpu, onRemoveCpu, lobbyTap, onLobbyTap }: Props) {
   const isHost = playerId === lobby.hostId;
   const players = lobby.players.filter((p) => p.role === 'player');
   const spectators = lobby.players.filter((p) => p.role === 'spectator');
+
+  // Floating emoji state
+  const [floatingEmojis, setFloatingEmojis] = useState<FloatingEmoji[]>([]);
+  const nextIdRef = useRef(0);
+
+  const addFloatingEmoji = useCallback((x: number, y: number, emoji: string) => {
+    const id = nextIdRef.current++;
+    setFloatingEmojis(prev => [...prev, { id, x, y, emoji, fading: false }]);
+    requestAnimationFrame(() => {
+      setFloatingEmojis(prev => prev.map(e => e.id === id ? { ...e, fading: true } : e));
+    });
+    setTimeout(() => {
+      setFloatingEmojis(prev => prev.filter(e => e.id !== id));
+    }, 2000);
+  }, []);
+
+  const handleContainerPointerDown = (e: React.PointerEvent) => {
+    if ((e.target as HTMLElement).closest('button')) return;
+    const myEmoji = isHost ? '\u{1F451}' : '\u{1F3AE}';
+    addFloatingEmoji(e.clientX, e.clientY, myEmoji);
+    onLobbyTap(e.clientX / window.innerWidth * 100, e.clientY / window.innerHeight * 100);
+  };
+
+  useEffect(() => {
+    if (lobbyTap) {
+      const x = lobbyTap.x / 100 * window.innerWidth;
+      const y = lobbyTap.y / 100 * window.innerHeight;
+      addFloatingEmoji(x, y, lobbyTap.emoji);
+    }
+  }, [lobbyTap, addFloatingEmoji]);
 
   // Motion permission for Tilt Chase — iOS 13+ requires requestPermission()
   // to be called from a user-gesture handler, so we surface a button here in
@@ -63,7 +104,22 @@ export function LobbyScreen({ lobby, playerId, onStartGame, onAddCpu }: Props) {
     lobby.players.find((p) => p.id === playerId)?.role === 'player';
 
   return (
-    <div style={styles.container}>
+    <div style={styles.container} onPointerDown={handleContainerPointerDown}>
+      {floatingEmojis.map(e => (
+        <span key={e.id} style={{
+          position: 'fixed',
+          left: e.x,
+          top: e.y,
+          fontSize: '28px',
+          pointerEvents: 'none' as const,
+          zIndex: 1000,
+          transition: 'transform 2s ease-out, opacity 2s ease-out',
+          transform: e.fading ? 'translateY(-80px)' : 'translateY(0)',
+          opacity: e.fading ? 0 : 1,
+        }}>
+          {e.emoji}
+        </span>
+      ))}
       <div style={styles.header}>
         <h2 style={styles.title}>Game Lobby</h2>
         <div style={styles.passphrase}>
@@ -87,6 +143,14 @@ export function LobbyScreen({ lobby, playerId, onStartGame, onAddCpu }: Props) {
               {p.isCpu && <span style={styles.cpuBadge}>CPU</span>}
               {p.id === playerId && (
                 <span style={styles.youBadge}>You</span>
+              )}
+              {isHost && p.isCpu && (
+                <button
+                  style={styles.removeCpuButton}
+                  onClick={() => onRemoveCpu(p.id)}
+                >
+                  {'\u2715'}
+                </button>
               )}
             </div>
           ))}
@@ -337,4 +401,20 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '14px', fontWeight: 700, cursor: 'pointer', flexShrink: 0,
   },
   motionBtnDisabled: { background: '#233554', color: '#5a6a8a', cursor: 'default' },
+  removeCpuButton: {
+    width: '26px',
+    height: '26px',
+    borderRadius: '50%',
+    border: '1px solid #e74c3c',
+    background: 'transparent',
+    color: '#e74c3c',
+    fontSize: '13px',
+    fontWeight: 700,
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 0,
+    flexShrink: 0,
+  },
 };

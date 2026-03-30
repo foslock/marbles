@@ -66,6 +66,27 @@ export function SpectatorView({
     }
   }, []);
 
+  // Dismiss stale overlays when a new event arrives
+  useEffect(() => {
+    if (tileEffect && !moveAnimation) {
+      // A tile effect is now visible — dismiss lingering minigame results
+      if (minigameResults) {
+        onClearMinigameResults();
+        onTurnComplete();
+      }
+    }
+  }, [tileEffect, moveAnimation]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (minigameResults && !moveAnimation) {
+      // Minigame results are now visible — dismiss lingering tile effect
+      if (tileEffect) {
+        onClearTileEffect();
+        onTurnComplete();
+      }
+    }
+  }, [minigameResults, moveAnimation]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Auto-dismiss overlays so they never get permanently stuck.
   // Don't start the countdown while the move animation is still running —
   // wait until it clears so the timer begins only once the overlay is visible.
@@ -74,7 +95,7 @@ export function SpectatorView({
     const timer = setTimeout(() => {
       onClearTileEffect();
       onTurnComplete();
-    }, 10000);
+    }, 5000);
     return () => clearTimeout(timer);
   }, [tileEffect, moveAnimation, onClearTileEffect, onTurnComplete]);
 
@@ -83,7 +104,7 @@ export function SpectatorView({
     const timer = setTimeout(() => {
       onClearMinigameResults();
       onTurnComplete();
-    }, 10000);
+    }, 5000);
     return () => clearTimeout(timer);
   }, [minigameResults, moveAnimation, onClearMinigameResults, onTurnComplete]);
 

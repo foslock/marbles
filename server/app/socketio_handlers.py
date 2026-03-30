@@ -283,6 +283,63 @@ async def add_cpu_player(sid, data):
 
 
 @sio.event
+async def remove_cpu_player(sid, data):
+    """Host removes a CPU player from the lobby."""
+    player_mapping = session_manager.sid_to_player.get(sid)
+    if not player_mapping:
+        return
+
+    session_id, player_id = player_mapping
+    session = session_manager.get_session(session_id)
+    if not session or session.host_id != player_id:
+        await sio.emit("error", {"message": "Only the host can remove CPU players."}, to=sid)
+        return
+
+    if session.state != "lobby":
+        await sio.emit("error", {"message": "Can only remove CPU players in the lobby."}, to=sid)
+        return
+
+    target_id = data.get("playerId")
+    target = session.players.get(target_id)
+    if not target or not target.is_cpu:
+        await sio.emit("error", {"message": "Player not found or not a CPU."}, to=sid)
+        return
+
+    del session.players[target_id]
+    await sio.emit("lobby_update", session.to_lobby_dict(), room=session_id)
+
+
+@sio.event
+async def lobby_tap(sid, data):
+    """Broadcast a lobby tap to all players for the floating emoji effect."""
+    player_mapping = session_manager.sid_to_player.get(sid)
+    if not player_mapping:
+        return
+    session_id, player_id = player_mapping
+    session = session_manager.get_session(session_id)
+    if not session:
+        return
+    if session.state != "lobby":
+        return
+    player = session.players.get(player_id)
+    if not player:
+        return
+    # Determine emoji based on role
+    if player_id == session.host_id:
+        emoji = "\U0001f451"
+    elif player.is_cpu:
+        emoji = "\U0001f916"
+    else:
+        emoji = "\U0001f3ae"
+    await sio.emit("lobby_tap", {
+        "playerId": player_id,
+        "emoji": emoji,
+        "x": data.get("x", 50),
+        "y": data.get("y", 50),
+    }, room=session_id, skip_sid=sid)
+
+
+@sio.event
 async def end_game(sid, data):
     """Host forcibly ends the game, clearing all server state."""
     player_mapping = session_manager.sid_to_player.get(sid)

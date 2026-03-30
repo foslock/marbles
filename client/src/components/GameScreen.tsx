@@ -209,10 +209,10 @@ export function GameScreen({
   );
 
   useEffect(() => {
-    if (!effectToShow && !tileEffect && !minigameResults && !tileSwapAnimation && !activeMoveAnimation) {
+    if (!effectToShow && !tileEffect && !minigameResults && !activeMoveAnimation) {
       setDisplayedTurnPlayerId(gameState.currentTurnPlayerId);
     }
-  }, [gameState.currentTurnPlayerId, effectToShow, tileEffect, minigameResults, tileSwapAnimation, activeMoveAnimation]);
+  }, [gameState.currentTurnPlayerId, effectToShow, tileEffect, minigameResults, activeMoveAnimation]);
 
   // ── Derived values ───────────────────────────────────────────────────────
   const myPlayer = playerId ? gameState.players[playerId] : null;
@@ -305,6 +305,7 @@ export function GameScreen({
         {!moveChosen && !effectToShow && !choiceToShow && !minigameResults && !activeMoveAnimation && !showScoreboard && (
           <DiceOverlay
             isMyTurn={isMyTurn}
+            isMyRoll={diceResult?.playerId === playerId}
             isSpectator={isSpectator}
             rolledValue={diceResult ? diceResult.roll : null}
             diceValues={diceResult ? diceResult.dice : null}

@@ -41,6 +41,7 @@ export function useSocket() {
     type: 'points' | 'marble';
     amount?: number;
   } | null>(null);
+  const [lobbyTap, setLobbyTap] = useState<{ playerId: string; emoji: string; x: number; y: number } | null>(null);
 
   // Buffered board updates — applied after swap animation completes
   const pendingBoardUpdatesRef = useRef<{ id: number; color: 'green' | 'red' | 'neutral'; category: string; effect: string }[]>([]);
@@ -313,6 +314,10 @@ export function useSocket() {
       sessionStorage.removeItem('ltm_session');
     });
 
+    socket.on('lobby_tap', (data: { playerId: string; emoji: string; x: number; y: number }) => {
+      setLobbyTap(data);
+    });
+
     socket.on('game_ended', () => {
       // Host forcibly ended the game — reset all client state
       setGameState(null);
@@ -399,6 +404,14 @@ export function useSocket() {
     socketRef.current?.emit('add_cpu_player', {});
   }, []);
 
+  const removeCpuPlayer = useCallback((playerId: string) => {
+    socketRef.current?.emit('remove_cpu_player', { playerId });
+  }, []);
+
+  const emitLobbyTap = useCallback((x: number, y: number) => {
+    socketRef.current?.emit('lobby_tap', { x, y });
+  }, []);
+
   return {
     connected,
     connectionError,
@@ -440,5 +453,8 @@ export function useSocket() {
     turnComplete,
     endGame,
     addCpuPlayer,
+    removeCpuPlayer,
+    lobbyTap,
+    emitLobbyTap,
   };
 }
