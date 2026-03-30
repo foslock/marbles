@@ -60,9 +60,7 @@ The active player rolls. The default is **1d6**, but active modifiers can change
 | Modifier | Effect |
 |----------|--------|
 | `double_dice` | Roll 2d6, move the **sum** (consumed on use) |
-| `worst_dice` | Roll 2d6, move the **minimum** (consumed on use) |
-
-The player may spend a saved **Re-roll** to discard the result and roll again.
+| `advantage` | Roll 2d6, **pick** which die to use (consumed on use) |
 
 ### 2. Choose a Destination
 
@@ -103,7 +101,7 @@ After any battle or minigame, the turn advances to the next player. If a player 
 | `gain_marble` | Gain 1 marble directly |
 | `steal_marble` | Choose an opponent with marbles and steal 1 |
 | `steal_points` | Choose an opponent; steal a random amount (10, 25, or 50 points) |
-| `reroll` | Gain 1 saved re-roll |
+| `reroll` | Advantage Roll — next turn you roll 2 dice and pick which to use |
 | `double_dice_next` | Your next roll uses 2 dice (take the sum) |
 | `protection` | Block the next negative tile effect you would receive |
 | `short_stop` | Next turn, choose any tile up to your roll distance (not just exactly that distance) |
@@ -118,7 +116,7 @@ After any battle or minigame, the turn advances to the next player. If a player 
 | `lose_marble` | Lose 1 marble (if you have any) |
 | `give_marble` | Choose an opponent to receive 1 of your marbles |
 | `give_points` | Choose an opponent to receive a random amount (10, 25, or 50) of your points |
-| `worst_dice_next` | Your next roll uses 2 dice (take the minimum) |
+| `dizzy` | Next turn, you move the full roll distance but in a random direction (no choice) |
 | `dizzy` | Next turn, you move the full roll distance but in a random direction (no choice) |
 
 ### Neutral (Grey)
@@ -196,10 +194,9 @@ Modifiers are one-time consumable buffs or debuffs that sit on your character un
 
 | Modifier | Source | Effect |
 |----------|--------|--------|
-| **Re-roll** | `reroll` tile | Re-roll the dice once on any future turn |
+| **Advantage** | `reroll` tile | Next turn, roll 2 dice and pick which one to use |
 | **Protection** | `protection` tile | Block the next negative tile effect you would receive |
 | **Double Dice** | `double_dice_next` tile | Your next roll uses 2d6 — move the sum |
-| **Worst Dice** | `worst_dice_next` tile | Your next roll uses 2d6 — move the minimum |
 | **Short Stop** | `short_stop` tile | Next turn, stop on any tile up to your roll distance |
 | **Dizzy** | `dizzy` tile | Next turn, move full distance in a random direction (no choice) |
 

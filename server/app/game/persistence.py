@@ -165,7 +165,7 @@ async def load_session(db: AsyncSession, passphrase: str) -> GameSession | None:
             points=db_player.points,
             is_connected=False,  # Not connected until they reconnect
             modifiers=db_player.modifiers or {
-                "rerolls": 0, "protection": 0, "double_dice": 0, "worst_dice": 0,
+                "advantage": 0, "protection": 0, "double_dice": 0, "short_stop": 0, "dizzy": 0,
             },
         )
         session.players[player.id] = player

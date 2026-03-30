@@ -181,10 +181,11 @@ export function SpectatorView({
                 </div>
                 {/* Modifier badges */}
                 <div style={styles.modifiers}>
-                  {p.modifiers.rerolls > 0 && <span style={styles.mod}>🔄{p.modifiers.rerolls}</span>}
+                  {p.modifiers.advantage > 0 && <span style={styles.modGood}>🎯{p.modifiers.advantage}</span>}
                   {p.modifiers.protection > 0 && <span style={styles.mod}>🛡️</span>}
                   {p.modifiers.double_dice > 0 && <span style={styles.modGood}>🎲🎲</span>}
-                  {p.modifiers.worst_dice > 0 && <span style={styles.modBad}>🎲↓</span>}
+                  {p.modifiers.short_stop > 0 && <span style={styles.modGood}>🎯</span>}
+                  {p.modifiers.dizzy > 0 && <span style={styles.modBad}>😵‍💫</span>}
                 </div>
               </div>
             );

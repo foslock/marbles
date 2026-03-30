@@ -40,10 +40,10 @@ class TestProcessTileEffect:
         assert player.marbles == initial + 1
         assert result["marblesGained"] == 1
 
-    def test_reroll(self, session, player):
+    def test_advantage_roll(self, session, player):
         self._set_tile_effect(session, player, "reroll", TileCategory.POSITIVE_MINOR, TileColor.GREEN)
         result = process_tile_effect(session, player)
-        assert player.modifiers["rerolls"] == 1
+        assert player.modifiers["advantage"] == 1
 
     def test_protection(self, session, player):
         self._set_tile_effect(session, player, "protection", TileCategory.POSITIVE_MEDIUM, TileColor.GREEN)
@@ -79,11 +79,6 @@ class TestProcessTileEffect:
         result = process_tile_effect(session, player)
         assert player.marbles == 0
         assert "none" not in result["message"].lower() or "lucky" in result["message"].lower()
-
-    def test_worst_dice(self, session, player):
-        self._set_tile_effect(session, player, "worst_dice_next", TileCategory.NEGATIVE_MEDIUM, TileColor.RED)
-        result = process_tile_effect(session, player)
-        assert player.modifiers["worst_dice"] == 1
 
     def test_short_stop(self, session, player):
         self._set_tile_effect(session, player, "short_stop", TileCategory.POSITIVE_MEDIUM, TileColor.GREEN)

@@ -321,32 +321,35 @@ async def roll_dice(sid, data):
         await sio.emit("error", {"message": "It's not your turn!"}, to=sid)
         return
 
-    use_reroll = data.get("useReroll", False)
     player = session.players[player_id]
 
-    if use_reroll and player.modifiers.get("rerolls", 0) <= 0:
-        await sio.emit("error", {"message": "No re-rolls available!"}, to=sid)
+    # Determine dice behavior based on modifiers
+    if player.modifiers.get("advantage", 0) > 0:
+        roll1 = random.randint(1, 6)
+        roll2 = random.randint(1, 6)
+        player.modifiers["advantage"] -= 1
+        dice_info = {"roll": roll1, "dice": [roll1, roll2], "type": "advantage"}
+
+        # Advantage: player picks which die to use. Send both dice, no
+        # reachable tiles yet — wait for choose_advantage event.
+        await sio.emit("dice_rolled", {
+            "playerId": player_id,
+            "playerName": player.name,
+            **dice_info,
+            "reachableTiles": [],
+        }, room=session_id)
+        await _persist_event(session_id, session.turn_number, "roll", player_id, dice_info)
         return
 
-    # Determine dice behavior based on modifiers
     if player.modifiers.get("double_dice", 0) > 0:
         roll1 = random.randint(1, 6)
         roll2 = random.randint(1, 6)
         roll = roll1 + roll2
         player.modifiers["double_dice"] -= 1
         dice_info = {"roll": roll, "dice": [roll1, roll2], "type": "double"}
-    elif player.modifiers.get("worst_dice", 0) > 0:
-        roll1 = random.randint(1, 6)
-        roll2 = random.randint(1, 6)
-        roll = min(roll1, roll2)
-        player.modifiers["worst_dice"] -= 1
-        dice_info = {"roll": roll, "dice": [roll1, roll2], "type": "worst"}
     else:
         roll = random.randint(1, 6)
         dice_info = {"roll": roll, "dice": [roll], "type": "normal"}
-
-    if use_reroll:
-        player.modifiers["rerolls"] -= 1
 
     # Check short_stop modifier: player can stop on any tile 1..N steps away
     has_short_stop = player.modifiers.get("short_stop", 0) > 0
@@ -429,6 +432,102 @@ async def roll_dice(sid, data):
 
         if effect_result.get("requiresChoice"):
             # For dizzy human players, still let them choose the target
+            await sio.emit("awaiting_choice", {
+                "playerId": player_id,
+                **effect_result,
+            }, to=sid)
+
+
+@sio.event
+async def choose_advantage(sid, data):
+    """Player picks which die to use from an advantage roll."""
+    player_mapping = session_manager.sid_to_player.get(sid)
+    if not player_mapping:
+        return
+
+    session_id, player_id = player_mapping
+    session = session_manager.get_session(session_id)
+    if not session or session.state != "playing":
+        return
+
+    if session.current_turn_player_id != player_id:
+        return
+
+    chosen_roll = data.get("roll")
+    if not isinstance(chosen_roll, int) or chosen_roll < 1 or chosen_roll > 6:
+        return
+
+    player = session.players[player_id]
+
+    # Compute reachable tiles for the chosen roll (with short_stop if active)
+    has_short_stop = player.modifiers.get("short_stop", 0) > 0
+    if has_short_stop:
+        reachable = []
+        seen_ids: set[int] = set()
+        for dist in range(1, chosen_roll + 1):
+            for tile_info in _get_reachable_tiles(session, player.current_tile, dist):
+                if tile_info["tileId"] not in seen_ids:
+                    seen_ids.add(tile_info["tileId"])
+                    reachable.append(tile_info)
+        player.modifiers["short_stop"] -= 1
+    else:
+        reachable = _get_reachable_tiles(session, player.current_tile, chosen_roll)
+
+    # Check dizzy modifier
+    has_dizzy = player.modifiers.get("dizzy", 0) > 0
+    if has_dizzy:
+        player.modifiers["dizzy"] -= 1
+
+    await sio.emit("advantage_chosen", {
+        "playerId": player_id,
+        "roll": chosen_roll,
+        "reachableTiles": reachable,
+        "dizzy": has_dizzy,
+    }, room=session_id)
+
+    # If dizzy, auto-move to a random reachable tile
+    if has_dizzy and reachable:
+        await asyncio.sleep(1.5)
+        chosen = random.choice(reachable)
+        from_tile = player.current_tile
+        player.current_tile = chosen["tileId"]
+
+        await sio.emit("player_moved", {
+            "playerId": player_id,
+            "playerName": player.name,
+            "tileId": chosen["tileId"],
+            "fromTile": from_tile,
+            "path": chosen["path"],
+            "dizzy": True,
+        }, room=session_id)
+
+        battle = check_for_battle(session, player)
+        if battle:
+            await sio.emit("tile_effect", {
+                "playerId": player_id,
+                "playerName": player.name,
+                "type": "battle",
+                "category": "neutral",
+                "color": "neutral",
+                "message": battle["message"],
+            }, room=session_id)
+            session._pending_swap_tile_id = None
+            session._pending_turn_player_id = player_id
+            session._pending_turn_action = "battle"
+            session._pending_battle = battle
+            return
+
+        effect_result = process_tile_effect(session, player)
+        await sio.emit("tile_effect", {
+            "playerId": player_id,
+            "playerName": player.name,
+            **effect_result,
+        }, room=session_id)
+        session._pending_swap_tile_id = chosen["tileId"]
+        session._pending_turn_player_id = player_id
+        session._pending_turn_action = "swap"
+
+        if effect_result.get("requiresChoice"):
             await sio.emit("awaiting_choice", {
                 "playerId": player_id,
                 **effect_result,
@@ -537,6 +636,7 @@ async def make_choice(sid, data):
 
     await sio.emit("choice_resolved", {
         "playerId": player_id,
+        "playerName": player.name,
         **result,
     }, room=session_id)
 

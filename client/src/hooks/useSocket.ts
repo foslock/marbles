@@ -142,6 +142,14 @@ export function useSocket() {
       setDiceResult(data);
     });
 
+    socket.on('advantage_chosen', (data: { playerId: string; roll: number; reachableTiles: { tileId: number; path: number[] }[]; dizzy?: boolean }) => {
+      // Update the dice result with the chosen roll and reachable tiles
+      setDiceResult((prev) => {
+        if (!prev || prev.playerId !== data.playerId) return prev;
+        return { ...prev, roll: data.roll, reachableTiles: data.reachableTiles, dizzy: data.dizzy };
+      });
+    });
+
     socket.on('player_moved', (data) => {
       // Trigger animation before updating state
       if (data.path && data.path.length > 1) {
@@ -191,6 +199,7 @@ export function useSocket() {
 
     socket.on('choice_resolved', (data: {
       playerId: string;
+      playerName?: string;
       type: string;
       targetId: string;
       targetName: string;
@@ -208,8 +217,9 @@ export function useSocket() {
         Haptics.medium();
         const color: ActivityItem['color'] = isSteal ? 'red' : 'neutral';
         const now = Date.now();
+        const actorName = data.playerName || 'Someone';
         const newItems: ActivityItem[] = [
-          { id: `cr-${now}`, message: data.message, color, timestamp: now },
+          { id: `cr-${now}`, message: `${actorName}: ${data.message}`, color, timestamp: now },
         ];
         if (data.autoMarbles) {
           SFX.marbleGain();
@@ -340,8 +350,12 @@ export function useSocket() {
     socketRef.current?.emit('start_game', { sessionId });
   }, [sessionId]);
 
-  const rollDice = useCallback((useReroll = false) => {
-    socketRef.current?.emit('roll_dice', { useReroll });
+  const rollDice = useCallback(() => {
+    socketRef.current?.emit('roll_dice', {});
+  }, []);
+
+  const chooseAdvantage = useCallback((roll: number) => {
+    socketRef.current?.emit('choose_advantage', { roll });
   }, []);
 
   const chooseMove = useCallback((tileId: number, path?: number[]) => {
@@ -412,6 +426,7 @@ export function useSocket() {
     joinSession,
     startGame,
     rollDice,
+    chooseAdvantage,
     chooseMove,
     makeChoice,
     submitMinigameScore,

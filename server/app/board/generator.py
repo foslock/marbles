@@ -54,7 +54,6 @@ TILE_EFFECTS: dict[TileCategory, tuple[TileColor, list[str]]] = {
     TileCategory.NEGATIVE_MEDIUM: (TileColor.RED, [
         "lose_50_points",
         "give_points",
-        "worst_dice_next",
         "dizzy",
     ]),
     TileCategory.NEGATIVE_MAJOR: (TileColor.RED, [

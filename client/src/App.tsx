@@ -112,6 +112,7 @@ export default function App() {
           activityFeed={socket.activityFeed}
           onAddActivityItem={socket.addActivityItem}
           onRollDice={socket.rollDice}
+          onChooseAdvantage={socket.chooseAdvantage}
           onChooseMove={socket.chooseMove}
           onMakeChoice={socket.makeChoice}
           onClearTileEffect={socket.clearTileEffect}

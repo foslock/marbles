@@ -24,7 +24,8 @@ interface Props {
   tileSwapAnimation: TileSwapAnimation | null;
   activityFeed: ActivityItem[];
   onAddActivityItem: (message: string, color: ActivityItem['color']) => void;
-  onRollDice: (useReroll?: boolean) => void;
+  onRollDice: () => void;
+  onChooseAdvantage: (roll: number) => void;
   onChooseMove: (tileId: number, path?: number[]) => void;
   onMakeChoice: (choiceType: string, targetId: string, amount?: number) => void;
   onClearTileEffect: () => void;
@@ -49,6 +50,7 @@ export function GameScreen({
   activityFeed,
   onAddActivityItem,
   onRollDice,
+  onChooseAdvantage,
   onChooseMove,
   onMakeChoice,
   onClearTileEffect,
@@ -280,15 +282,17 @@ export function GameScreen({
         <ActivityFeed items={activityFeed} />
 
         {/* Physics dice overlay — visible during active turns */}
-        {!effectToShow && !choiceToShow && !minigameResults && !tileSwapAnimation && !activeMoveAnimation && (
+        {!effectToShow && !choiceToShow && !minigameResults && !activeMoveAnimation && !showScoreboard && (
           <DiceOverlay
             isMyTurn={isMyTurn}
             isSpectator={isSpectator}
             rolledValue={diceResult ? diceResult.roll : null}
+            diceValues={diceResult ? diceResult.dice : null}
+            diceType={diceResult ? diceResult.type : 'normal'}
             hasDoubleDice={(myPlayer?.modifiers.double_dice ?? 0) > 0}
-            hasWorstDice={(myPlayer?.modifiers.worst_dice ?? 0) > 0}
-            hasRerolls={(myPlayer?.modifiers.rerolls ?? 0) > 0}
+            hasAdvantage={(myPlayer?.modifiers.advantage ?? 0) > 0}
             onRoll={onRollDice}
+            onChooseAdvantage={onChooseAdvantage}
             onDiceSettled={onDiceSettled}
           />
         )}

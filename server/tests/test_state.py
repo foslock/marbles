@@ -7,10 +7,9 @@ from app.game.state import GameSession, PlayerState, SessionManager
 class TestPlayerState:
     def test_default_modifiers(self):
         p = PlayerState(id="p1", sid="s1", name="Test", role="player")
-        assert p.modifiers["rerolls"] == 0
+        assert p.modifiers["advantage"] == 0
         assert p.modifiers["protection"] == 0
         assert p.modifiers["double_dice"] == 0
-        assert p.modifiers["worst_dice"] == 0
         assert p.modifiers["short_stop"] == 0
         assert p.modifiers["dizzy"] == 0
 

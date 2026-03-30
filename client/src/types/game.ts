@@ -18,10 +18,9 @@ export interface PlayerState {
   isConnected: boolean;
   isCpu?: boolean;
   modifiers: {
-    rerolls: number;
+    advantage: number;
     protection: number;
     double_dice: number;
-    worst_dice: number;
     short_stop: number;
     dizzy: number;
   };
@@ -80,7 +79,7 @@ export interface DiceResult {
   playerName: string;
   roll: number;
   dice: number[];
-  type: 'normal' | 'double' | 'worst';
+  type: 'normal' | 'double' | 'advantage';
   reachableTiles: { tileId: number; path: number[] }[];
   shortStop?: boolean;
   dizzy?: boolean;

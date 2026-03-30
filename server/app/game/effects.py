@@ -57,8 +57,8 @@ def process_tile_effect(
             result["pointsGained"] = 50
 
         case "reroll":
-            player.modifiers["rerolls"] = player.modifiers.get("rerolls", 0) + 1
-            result["message"] = f"Gained a re-roll! (You have {player.modifiers['rerolls']} saved)"
+            player.modifiers["advantage"] = player.modifiers.get("advantage", 0) + 1
+            result["message"] = f"Advantage Roll! Next turn you roll two dice and pick one. (You have {player.modifiers['advantage']} saved)"
 
         case "protection":
             player.modifiers["protection"] = player.modifiers.get("protection", 0) + 1
@@ -109,10 +109,6 @@ def process_tile_effect(
             player.points = max(0, player.points - 50)
             result["message"] = "Lost 50 points!"
             result["pointsLost"] = 50
-
-        case "worst_dice_next":
-            player.modifiers["worst_dice"] = player.modifiers.get("worst_dice", 0) + 1
-            result["message"] = "Next roll uses two dice — you take the WORST!"
 
         case "dizzy":
             player.modifiers["dizzy"] = player.modifiers.get("dizzy", 0) + 1

@@ -26,10 +26,9 @@ class PlayerState:
     is_connected: bool = True
     is_cpu: bool = False
     modifiers: dict = field(default_factory=lambda: {
-        "rerolls": 0,
+        "advantage": 0,
         "protection": 0,
         "double_dice": 0,
-        "worst_dice": 0,
         "short_stop": 0,
         "dizzy": 0,
     })
