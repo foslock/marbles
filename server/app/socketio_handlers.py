@@ -445,19 +445,12 @@ async def lobby_tap(sid, data):
     }, room=session_id, skip_sid=sid)
 
 
-# Cached DB stats for global_stats polling (refreshed every 30s)
-_db_stats_cache: dict = {"totalMarbles": 0, "totalPoints": 0}
-_db_stats_cache_time: float = 0
-_DB_STATS_TTL: float = 30.0
-
-
-async def _get_db_stats() -> dict:
-    """Return cached DB stats, refreshing if stale."""
-    global _db_stats_cache, _db_stats_cache_time
-    import time
-    now = time.monotonic()
-    if now - _db_stats_cache_time < _DB_STATS_TTL:
-        return _db_stats_cache
+@sio.event
+async def get_global_stats(sid, data):
+    """Return aggregate marbles and points across all sessions (in-memory + DB)."""
+    mem_stats = session_manager.get_all_player_stats()
+    total_marbles = mem_stats["totalMarbles"]
+    total_points = mem_stats["totalPoints"]
 
     try:
         from .database import async_session as db_session_maker
@@ -479,23 +472,14 @@ async def _get_db_stats() -> dict:
                 query = query.where(LtmSession.id.notin_(in_memory_ids))
             result = await db.execute(query)
             row = result.one()
-            _db_stats_cache = {"totalMarbles": int(row[0]), "totalPoints": int(row[1])}
-            _db_stats_cache_time = now
+            total_marbles += int(row[0])
+            total_points += int(row[1])
     except Exception as e:
         logger.warning(f"Failed to fetch DB stats: {e}")
 
-    return _db_stats_cache
-
-
-@sio.event
-async def get_global_stats(sid, data):
-    """Return aggregate marbles and points across all sessions (in-memory + DB)."""
-    mem_stats = session_manager.get_all_player_stats()
-    db_stats = await _get_db_stats()
-
     await sio.emit("global_stats", {
-        "totalMarbles": mem_stats["totalMarbles"] + db_stats["totalMarbles"],
-        "totalPoints": mem_stats["totalPoints"] + db_stats["totalPoints"],
+        "totalMarbles": total_marbles,
+        "totalPoints": total_points,
     }, to=sid)
 
 
