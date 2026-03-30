@@ -34,6 +34,7 @@ interface Props {
   onSwapAnimationComplete?: () => void;
   stealAnimation?: StealAnimation | null;
   onStealAnimationComplete?: () => void;
+  activePlayerWaitState?: 'rolling' | 'choosing_tile' | 'choosing_target' | null;
   initialScale?: number;
 }
 
@@ -66,7 +67,7 @@ const MOVE_SPEED = 350;
 // ms for the landing ring animation after token arrives
 const LANDING_DURATION = 800;
 
-export function GameBoard({ board, players, reachableTiles, onTileClick, moveAnimation, onAnimationComplete, myPlayerId, activePlayerId, tileSwapAnimation, onSwapAnimationComplete, stealAnimation, onStealAnimationComplete, initialScale = PLAYER_ZOOM }: Props) {
+export function GameBoard({ board, players, reachableTiles, onTileClick, moveAnimation, onAnimationComplete, myPlayerId, activePlayerId, tileSwapAnimation, onSwapAnimationComplete, stealAnimation, onStealAnimationComplete, activePlayerWaitState, initialScale = PLAYER_ZOOM }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
@@ -79,6 +80,8 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
   activePlayerIdRef.current = activePlayerId;
   const myPlayerIdRef = useRef(myPlayerId);
   myPlayerIdRef.current = myPlayerId;
+  const activePlayerWaitStateRef = useRef(activePlayerWaitState);
+  activePlayerWaitStateRef.current = activePlayerWaitState;
 
   // Movement animation state
   const animRef = useRef<{
@@ -381,6 +384,49 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
       }
     }
 
+    // Draw wait-state icon above the active player's token (not for the local player)
+    const waitState = activePlayerWaitStateRef.current;
+    if (waitState && activePlayerId && activePlayerId !== myPlayerId) {
+      const activePlayer = players.find((p) => p.id === activePlayerId);
+      if (activePlayer && !(animating && animating.playerId === activePlayerId)) {
+        const tile = board.tiles[String(activePlayer.currentTile)];
+        if (tile) {
+          // Calculate token position (account for shared tiles)
+          const tilePlayers2 = tilePlayerMap[activePlayer.currentTile] || [];
+          const idx = tilePlayers2.indexOf(activePlayer);
+          const shared2 = tilePlayers2.length > 1;
+          const angle2 = tilePlayers2.length > 1 ? (idx / tilePlayers2.length) * Math.PI * 2 - Math.PI / 2 : 0;
+          const spread2 = shared2 ? 16 : 0;
+          const tokenX = tile.x + Math.cos(angle2) * spread2;
+          const tokenY = tile.y + Math.sin(angle2) * spread2;
+          const r = shared2 ? TOKEN_RADIUS_SHARED : TOKEN_RADIUS;
+
+          // Bobbing animation
+          const bob = Math.sin(now / 400) * 2;
+          const iconY = tokenY - r - 14 + bob;
+
+          const icon = waitState === 'rolling' ? '\uD83C\uDFB2'
+            : waitState === 'choosing_tile' ? '\uD83D\uDC46'
+            : '\uD83C\uDFAF';
+
+          // Background pill
+          ctx.beginPath();
+          ctx.arc(tokenX, iconY, 9, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(10, 25, 47, 0.85)';
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(243, 156, 18, 0.7)';
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+
+          // Icon emoji
+          ctx.font = '12px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(icon, tokenX, iconY + 0.5);
+        }
+      }
+    }
+
     // Draw landing ring animation
     const landing = landingRef.current;
     if (landing) {
@@ -610,7 +656,7 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
     }
 
     ctx.restore();
-  }, [board, players, reachableSet, offset, scale, activePlayerId]);
+  }, [board, players, reachableSet, offset, scale, activePlayerId, activePlayerWaitState, myPlayerId]);
 
   // Keep drawRef current so animation loops use the latest draw without restarting
   drawRef.current = draw;

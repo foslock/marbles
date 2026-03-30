@@ -20,6 +20,7 @@ interface Props {
   tileEffect: TileEffect | null;
   minigameResults: MinigameResults | null;
   awaitingChoice: TileEffect | null;
+  pendingChoicePlayerId: string | null;
   moveAnimation: MoveAnimation | null;
   tileSwapAnimation: TileSwapAnimation | null;
   activityFeed: ActivityItem[];
@@ -46,6 +47,7 @@ export function GameScreen({
   tileEffect,
   minigameResults,
   awaitingChoice,
+  pendingChoicePlayerId,
   moveAnimation,
   tileSwapAnimation,
   activityFeed,
@@ -204,11 +206,13 @@ export function GameScreen({
         onAddActivityItem(`\uD83D\uDD2E ${effectToShow.playerName} earned ${effectToShow.autoMarbles} marble from points!`, 'gold');
       }
       // Non-active players don't see the popup overlay, so auto-clear the effect
-      // immediately so it doesn't block turn transitions.
+      // immediately.  Do NOT call onTurnComplete here — only the active player
+      // should signal turn completion after dismissing their popup.  Sending it
+      // from non-active clients causes the tile-swap animation + dice prompt to
+      // appear prematurely before the active player has even seen their effect.
       if (effectToShow.playerId !== playerId) {
         setEffectToShow(null);
         onClearTileEffect();
-        onTurnComplete();
       }
     }
   }, [effectToShow]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -221,10 +225,10 @@ export function GameScreen({
   );
 
   useEffect(() => {
-    if (!effectToShow && !tileEffect && !minigameResults && !activeMoveAnimation) {
+    if (!effectToShow && !tileEffect && !minigameResults && !activeMoveAnimation && !tileSwapAnimation) {
       setDisplayedTurnPlayerId(gameState.currentTurnPlayerId);
     }
-  }, [gameState.currentTurnPlayerId, effectToShow, tileEffect, minigameResults, activeMoveAnimation]);
+  }, [gameState.currentTurnPlayerId, effectToShow, tileEffect, minigameResults, activeMoveAnimation, tileSwapAnimation]);
 
   // ── Derived values ───────────────────────────────────────────────────────
   const myPlayer = playerId ? gameState.players[playerId] : null;
@@ -237,6 +241,36 @@ export function GameScreen({
 
   const needsToChooseMove =
     !moveChosen && diceSettled && diceResult && diceResult.playerId === playerId && diceResult.reachableTiles.length > 0 && !diceResult.dizzy;
+
+  // Compute what the active turn player is currently waiting on — used to render
+  // a small icon above their token so other players can see the game state.
+  const activePlayerWaitState: 'rolling' | 'choosing_tile' | 'choosing_target' | null = (() => {
+    // During animations or overlays there's no "waiting on input" state
+    if (activeMoveAnimation || tileSwapAnimation || minigameResults) return null;
+
+    // Active player has a pending choice (steal/give target selection)
+    if (pendingChoicePlayerId || (awaitingChoice && awaitingChoice.playerId === displayedTurnPlayerId)) {
+      return 'choosing_target';
+    }
+
+    // Active player is reading their tile effect popup — not waiting on input
+    if (effectToShow && effectToShow.playerId === displayedTurnPlayerId) return null;
+
+    // Dice rolled with reachable tiles — waiting to pick a destination
+    if (diceResult && !moveChosen && diceResult.reachableTiles.length > 0 && !diceResult.dizzy) {
+      return 'choosing_tile';
+    }
+
+    // Advantage roll where player still needs to pick a die
+    if (diceResult && !moveChosen && diceResult.type === 'advantage' && diceResult.reachableTiles.length === 0) {
+      return 'rolling';
+    }
+
+    // No dice result yet — player needs to roll
+    if (!diceResult && !effectToShow && !moveChosen) return 'rolling';
+
+    return null;
+  })();
 
   const handleChooseMove = (tileId: number) => {
     const tile = diceResult?.reachableTiles.find((t) => t.tileId === tileId);
@@ -308,6 +342,7 @@ export function GameScreen({
             onSwapAnimationComplete={onClearTileSwapAnimation}
             stealAnimation={stealAnimation}
             onStealAnimationComplete={onClearStealAnimation}
+            activePlayerWaitState={activePlayerWaitState}
           />
         )}
 
@@ -315,7 +350,7 @@ export function GameScreen({
         <ActivityFeed items={activityFeed} />
 
         {/* Physics dice overlay — visible during active turns */}
-        {!moveChosen && !effectToShow && !choiceToShow && !minigameResults && !activeMoveAnimation && !showScoreboard && (
+        {!moveChosen && !effectToShow && !choiceToShow && !minigameResults && !activeMoveAnimation && !tileSwapAnimation && !showScoreboard && (
           <DiceOverlay
             isMyTurn={isMyTurn}
             isMyRoll={diceResult?.playerId === playerId}

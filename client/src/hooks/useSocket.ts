@@ -77,6 +77,9 @@ export function useSocket() {
     amount?: number;
   } | null>(null);
   const [lobbyTap, setLobbyTap] = useState<{ playerId: string; emoji: string; x: number; y: number } | null>(null);
+  // Track when the active player has a pending choice (steal/give target).
+  // Set on tile_effect with requiresChoice, cleared on choice_resolved / turn_update.
+  const [pendingChoicePlayerId, setPendingChoicePlayerId] = useState<string | null>(null);
 
   // Buffered board updates — applied after swap animation completes
   const pendingBoardUpdatesRef = useRef<{ id: number; color: 'green' | 'red' | 'neutral'; category: string; effect: string }[]>([]);
@@ -222,6 +225,9 @@ export function useSocket() {
       // Board updates are now deferred — they arrive via tile_swap at end of turn
       // Activity item is added by GameScreen after movement animation completes
       setTileEffect(data);
+      if (data.requiresChoice) {
+        setPendingChoicePlayerId(data.playerId);
+      }
     });
 
     on('tile_swap', (data: { sourceTileId: number; targetTileId: number | null; color: string; boardUpdates: { id: number; color: 'green' | 'red' | 'neutral'; category: string; effect: string }[] }) => {
@@ -259,6 +265,7 @@ export function useSocket() {
       targetAutoMarbles?: number;
     }) => {
       setAwaitingChoice(null);
+      setPendingChoicePlayerId(null);
       // Activity item + sound + animation for steal/give effects
       const isSteal = data.type === 'steal_points' || data.type === 'steal_marble';
       const isGive = data.type === 'give_points' || data.type === 'give_marble';
@@ -341,6 +348,7 @@ export function useSocket() {
         };
       });
       setDiceResult(null);
+      setPendingChoicePlayerId(null);
       // Do NOT clear tileEffect or minigameResults here.
       // turn_update arrives almost immediately after these events, before the
       // player has seen the overlay. Each overlay auto-dismisses via its own
@@ -547,6 +555,7 @@ export function useSocket() {
         { id: `te-${Date.now()}-${Math.random()}`, message, color, timestamp: Date.now() },
       ]);
     },
+    pendingChoicePlayerId,
     createSession,
     joinSession,
     startGame,
