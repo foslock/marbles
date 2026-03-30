@@ -162,6 +162,16 @@ export function GameScreen({
     }
   }, [awaitingChoice, moveAnimation, activeMoveAnimation]);
 
+  // When a move animation starts (from any player), mark moveChosen so the
+  // DiceOverlay doesn't re-appear after the animation completes but before
+  // turn_update clears diceResult.  Without this, non-active players see a
+  // spurious auto-roll that can leave the dice stuck.
+  useEffect(() => {
+    if (activeMoveAnimation) {
+      setMoveChosen(true);
+    }
+  }, [activeMoveAnimation]);
+
   const handleAnimationComplete = useCallback(() => {
     onClearMoveAnimation();
     if (effectPendingRef.current) {
