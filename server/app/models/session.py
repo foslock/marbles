@@ -21,7 +21,7 @@ class LtmSession(Base, TimestampMixin):
     state: Mapped[str] = mapped_column(
         String(20), default="lobby"
     )  # lobby, playing, finished
-    target_marbles: Mapped[int] = mapped_column(Integer, default=10)
+    target_marbles: Mapped[int] = mapped_column(Integer, default=5)
     current_turn_player_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), nullable=True
     )

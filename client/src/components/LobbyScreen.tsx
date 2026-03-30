@@ -15,6 +15,7 @@ interface Props {
   onStartGame: () => void;
   onAddCpu: () => void;
   onRemoveCpu: (playerId: string) => void;
+  onUpdateTargetMarbles: (value: number) => void;
   lobbyTap: { playerId: string; emoji: string; x: number; y: number } | null;
   onLobbyTap: (x: number, y: number) => void;
 }
@@ -23,7 +24,7 @@ interface Props {
 // own permission prompt when the lobby already handled it this session.
 export let lobbyMotionGranted = false;
 
-export function LobbyScreen({ lobby, playerId, onStartGame, onAddCpu, onRemoveCpu, lobbyTap, onLobbyTap }: Props) {
+export function LobbyScreen({ lobby, playerId, onStartGame, onAddCpu, onRemoveCpu, onUpdateTargetMarbles, lobbyTap, onLobbyTap }: Props) {
   const isHost = playerId === lobby.hostId;
   const players = lobby.players.filter((p) => p.role === 'player');
   const spectators = lobby.players.filter((p) => p.role === 'spectator');
@@ -179,7 +180,28 @@ export function LobbyScreen({ lobby, playerId, onStartGame, onAddCpu, onRemoveCp
       )}
 
       <div style={styles.settings}>
-        <span style={styles.settingLabel}>Target: {lobby.targetMarbles} marbles</span>
+        {isHost ? (
+          <div style={styles.settingRow}>
+            <span style={styles.settingLabel}>Target Marbles:</span>
+            <div style={styles.stepper}>
+              <button
+                style={styles.stepperBtn}
+                onClick={() => onUpdateTargetMarbles(Math.max(3, lobby.targetMarbles - 1))}
+              >
+                -
+              </button>
+              <span style={styles.stepperValue}>{lobby.targetMarbles}</span>
+              <button
+                style={styles.stepperBtn}
+                onClick={() => onUpdateTargetMarbles(Math.min(25, lobby.targetMarbles + 1))}
+              >
+                +
+              </button>
+            </div>
+          </div>
+        ) : (
+          <span style={styles.settingLabel}>Target: {lobby.targetMarbles} marbles</span>
+        )}
       </div>
 
       {/* Motion permission banner — shown to iOS players before the game starts */}
@@ -337,7 +359,39 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#8892b0',
     fontSize: '13px',
   },
+  settingRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '12px',
+  },
   settingLabel: {},
+  stepper: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+  },
+  stepperBtn: {
+    width: '32px',
+    height: '32px',
+    borderRadius: '8px',
+    border: '1px solid #3498db',
+    background: 'transparent',
+    color: '#3498db',
+    fontSize: '18px',
+    fontWeight: 700,
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepperValue: {
+    color: '#ccd6f6',
+    fontSize: '20px',
+    fontWeight: 700,
+    minWidth: '32px',
+    textAlign: 'center' as const,
+  },
   startButton: {
     padding: '16px',
     fontSize: '18px',

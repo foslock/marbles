@@ -2,7 +2,7 @@
 
 ## Objective
 
-Collect marbles. The first player to reach the target marble count (default **10**) wins.
+Collect marbles. The first player to reach the target marble count (default **5**) wins.
 
 Marbles are earned by landing on positive tiles, winning battles, placing well in minigames, and automatically converting accumulated points (every **100 points = 1 marble**).
 
@@ -12,7 +12,7 @@ Marbles are earned by landing on positive tiles, winning battles, placing well i
 
 ### Creating a Session
 
-1. One player creates a game and sets the target marble count (default 10).
+1. One player creates a game and sets the target marble count (default 5).
 2. The server generates a unique **two-word passphrase** (e.g. `wobbly-penguin`).
 3. Other players join by entering that passphrase.
 4. **2–10 players** can participate. Up to **10 spectators** may also join at any time (including mid-game).
@@ -231,7 +231,7 @@ Each player is assigned one of 16 absurdist tokens at game start.
 
 ## Winning
 
-The game ends the moment a player's marble count reaches or exceeds the target (default **10**). That player is declared the winner. All remaining players are ranked by marble count, with points used as a tiebreaker.
+The game ends the moment a player's marble count reaches or exceeds the target (default **5**). That player is declared the winner. All remaining players are ranked by marble count, with points used as a tiebreaker.
 
 ---
 
