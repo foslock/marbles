@@ -125,7 +125,6 @@ export function HomeScreen({ connected, onCreateSession, onJoinSession }: Props)
   const [mode, setMode] = useState<'menu' | 'create' | 'join' | 'playtest' | 'playtest-playing' | 'playtest-done'>('menu');
   const [name, setName] = useState('');
   const [passphrase, setPassphrase] = useState('');
-  const [targetMarbles, setTargetMarbles] = useState(10);
   const [role, setRole] = useState<'player' | 'spectator'>('player');
   const [showHowToPlay, setShowHowToPlay] = useState(false);
 
@@ -188,7 +187,7 @@ export function HomeScreen({ connected, onCreateSession, onJoinSession }: Props)
 
   const handleCreate = () => {
     if (!name.trim()) return;
-    onCreateSession(name.trim(), targetMarbles);
+    onCreateSession(name.trim(), 5);
   };
 
   const handleJoin = () => {
@@ -273,24 +272,6 @@ export function HomeScreen({ connected, onCreateSession, onJoinSession }: Props)
             maxLength={12}
             autoFocus
           />
-          <div style={styles.settingRow}>
-            <label style={styles.label}>Target Marbles:</label>
-            <div style={styles.stepper}>
-              <button
-                style={styles.stepperBtn}
-                onClick={() => setTargetMarbles(Math.max(3, targetMarbles - 1))}
-              >
-                -
-              </button>
-              <span style={styles.stepperValue}>{targetMarbles}</span>
-              <button
-                style={styles.stepperBtn}
-                onClick={() => setTargetMarbles(Math.min(25, targetMarbles + 1))}
-              >
-                +
-              </button>
-            </div>
-          </div>
           <button className="ltm-btn-hover ltm-primary-hover" style={styles.primaryButton} onClick={handleCreate}>
             Create Game
           </button>

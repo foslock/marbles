@@ -84,7 +84,7 @@ async def disconnect(sid):
 @sio.event
 async def create_session(sid, data):
     """Host creates a new game session."""
-    target_marbles = data.get("targetMarbles", 10)
+    target_marbles = data.get("targetMarbles", 5)
 
     # Generate unique passphrase
     for _ in range(100):
@@ -158,6 +158,26 @@ async def join_session(sid, data):
         await sio.emit("game_state", session.to_game_dict(), to=sid)
 
     await _persist_session(session)
+
+
+@sio.event
+async def update_target_marbles(sid, data):
+    """Host adjusts the target marble count while in the lobby."""
+    lookup = session_manager.sid_to_player.get(sid)
+    if not lookup:
+        return
+    session_id, player_id = lookup
+    session = session_manager.sessions.get(session_id)
+    if not session or session.state != "lobby":
+        return
+    if player_id != session.host_id:
+        await sio.emit("error", {"message": "Only the host can change settings."}, to=sid)
+        return
+    value = data.get("targetMarbles")
+    if not isinstance(value, int) or value < 3 or value > 25:
+        return
+    session.target_marbles = value
+    await sio.emit("lobby_update", session.to_lobby_dict(), room=session.id)
 
 
 @sio.event

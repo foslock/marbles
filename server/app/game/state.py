@@ -40,7 +40,7 @@ class GameSession:
     passphrase: str
     host_id: str | None = None
     state: str = "lobby"  # lobby, playing, finished
-    target_marbles: int = 3
+    target_marbles: int = 5
     players: dict[str, PlayerState] = field(default_factory=dict)
     board: Board | None = None
     turn_order: list[str] = field(default_factory=list)
@@ -132,7 +132,7 @@ class SessionManager:
         self.passphrase_map: dict[str, str] = {}  # passphrase -> session_id
         self.sid_to_player: dict[str, tuple[str, str]] = {}  # socket_sid -> (session_id, player_id)
 
-    def create_session(self, passphrase: str, target_marbles: int = 10) -> GameSession:
+    def create_session(self, passphrase: str, target_marbles: int = 5) -> GameSession:
         session_id = str(uuid.uuid4())
         session = GameSession(
             id=session_id,

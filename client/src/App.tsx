@@ -78,6 +78,7 @@ export default function App() {
           onStartGame={socket.startGame}
           onAddCpu={socket.addCpuPlayer}
           onRemoveCpu={socket.removeCpuPlayer}
+          onUpdateTargetMarbles={socket.updateTargetMarbles}
           lobbyTap={socket.lobbyTap}
           onLobbyTap={socket.emitLobbyTap}
         />
