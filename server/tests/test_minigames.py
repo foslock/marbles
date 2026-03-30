@@ -55,9 +55,9 @@ class TestMakeConfig:
     def test_reaction_has_delays(self):
         config = _make_config("reaction")
         assert "delays" in config
-        assert len(config["delays"]) == 6
+        assert len(config["delays"]) == 8
         for d in config["delays"]:
-            assert 800 <= d <= 2500
+            assert 600 <= d <= 1800
 
     def test_memory_has_sequence(self):
         config = _make_config("memory")
