@@ -55,6 +55,7 @@ export function useSocket() {
     if (log.length > MAX_EVENT_LOG) log.splice(0, log.length - MAX_EVENT_LOG);
   }, []);
   const [connected, setConnected] = useState(false);
+  const [reconnecting, setReconnecting] = useState(false);
   const [connectionError, setConnectionError] = useState<{ message: string; details: string } | null>(null);
   const [phase, setPhase] = useState<GamePhase>('home');
   const [playerId, setPlayerId] = useState<string | null>(null);
@@ -77,6 +78,7 @@ export function useSocket() {
     amount?: number;
   } | null>(null);
   const [lobbyTap, setLobbyTap] = useState<{ playerId: string; emoji: string; x: number; y: number } | null>(null);
+  const [globalStats, setGlobalStats] = useState<{ totalMarbles: number; totalPoints: number } | null>(null);
   // Track when the active player has a pending choice (steal/give target).
   // Set on tile_effect with requiresChoice, cleared on choice_resolved / turn_update.
   const [pendingChoicePlayerId, setPendingChoicePlayerId] = useState<string | null>(null);
@@ -138,6 +140,7 @@ export function useSocket() {
         try {
           const { passphrase, playerId: savedPlayerId } = JSON.parse(savedSession);
           if (passphrase && savedPlayerId) {
+            setReconnecting(true);
             emit('reconnect_session', { passphrase, playerId: savedPlayerId });
           }
         } catch {}
@@ -149,8 +152,20 @@ export function useSocket() {
         details: err.message || String(err),
       });
     });
-    socket.on('disconnect', () => setConnected(false));
-    socket.on('error', (data: { message: string }) => { logEvent('rx', 'error', data); setError(data.message); });
+    socket.on('disconnect', () => {
+      setConnected(false);
+      // If we have a session, we're in reconnecting state until socket reconnects
+      const savedSession = sessionStorage.getItem('ltm_session');
+      if (savedSession) {
+        setReconnecting(true);
+      }
+    });
+    socket.on('error', (data: { message: string }) => {
+      logEvent('rx', 'error', data);
+      setError(data.message);
+      // If we were reconnecting and got an error, the session is gone
+      setReconnecting(false);
+    });
 
     on('session_created', (data: { playerId: string; sessionId: string; lobby: LobbyData }) => {
       setPlayerId(data.playerId);
@@ -158,6 +173,7 @@ export function useSocket() {
       setSessionId(data.sessionId);
       setLobby(data.lobby);
       setPhase('lobby');
+      setReconnecting(false);
       // Persist for reconnection
       sessionStorage.setItem('ltm_session', JSON.stringify({
         passphrase: data.lobby.passphrase,
@@ -171,6 +187,7 @@ export function useSocket() {
       setSessionId(data.sessionId);
       setLobby(data.lobby);
       setPhase('lobby');
+      setReconnecting(false);
       sessionStorage.setItem('ltm_session', JSON.stringify({
         passphrase: data.lobby.passphrase,
         playerId: data.playerId,
@@ -188,6 +205,7 @@ export function useSocket() {
 
     on('game_state', (data: GameState) => {
       setGameState(data);
+      setReconnecting(false);
       if (data.state === 'playing') setPhase('playing');
     });
 
@@ -375,6 +393,31 @@ export function useSocket() {
       setLobbyTap(data);
     });
 
+    on('global_stats', (data: { totalMarbles: number; totalPoints: number }) => {
+      setGlobalStats(data);
+    });
+
+    on('session_expired', (_data: { message: string }) => {
+      // Session expired on server — reset to home and clear saved session
+      setGameState(null);
+      setDiceResult(null);
+      setTileEffect(null);
+      setMinigameInfo(null);
+      setMinigameResults(null);
+      setAwaitingChoice(null);
+      setMoveAnimation(null);
+      setTileSwapAnimation(null);
+      setActivityFeed([]);
+      setLobby(null);
+      setPlayerId(null);
+      playerIdRef.current = null;
+      setSessionId(null);
+      setPhase('home');
+      setReconnecting(false);
+      sessionStorage.removeItem('ltm_session');
+      setError('Session expired due to inactivity.');
+    });
+
     on('game_ended', () => {
       // Host forcibly ended the game — reset all client state
       setGameState(null);
@@ -391,6 +434,7 @@ export function useSocket() {
       playerIdRef.current = null;
       setSessionId(null);
       setPhase('home');
+      setReconnecting(false);
       sessionStorage.removeItem('ltm_session');
     });
 
@@ -477,6 +521,10 @@ export function useSocket() {
     emitRef.current('lobby_tap', { x, y });
   }, []);
 
+  const requestGlobalStats = useCallback(() => {
+    emitRef.current('get_global_stats', {});
+  }, []);
+
   // ── Diagnostics snapshot ──────────────────────────────────────────────────
   // Builds a JSON-serialisable object with recent event log, current UI
   // state, and player info — enough context to debug multiplayer issues.
@@ -541,6 +589,7 @@ export function useSocket() {
 
   return {
     connected,
+    reconnecting,
     connectionError,
     phase,
     playerId,
@@ -586,6 +635,8 @@ export function useSocket() {
     removeCpuPlayer,
     lobbyTap,
     emitLobbyTap,
+    globalStats,
+    requestGlobalStats,
     getDiagnostics,
   };
 }
