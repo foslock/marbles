@@ -118,6 +118,7 @@ export default function App() {
           onChooseAdvantage={socket.chooseAdvantage}
           onChooseMove={socket.chooseMove}
           onMakeChoice={socket.makeChoice}
+          pendingChoicePlayerId={socket.pendingChoicePlayerId}
           onClearTileEffect={socket.clearTileEffect}
           onClearMinigameResults={socket.clearMinigameResults}
           onClearMoveAnimation={socket.clearMoveAnimation}
