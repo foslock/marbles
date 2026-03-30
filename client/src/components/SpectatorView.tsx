@@ -3,6 +3,7 @@ import type { GameState, MinigameResults, TileEffect, ActivityItem } from '../ty
 import { GameBoard, type MoveAnimation, type TileSwapAnimation } from './GameBoard';
 import { ActivityFeed } from './ActivityFeed';
 import { Fireworks } from './Fireworks';
+import { TurnBanner } from './TurnBanner';
 
 interface Props {
   gameState: GameState;
@@ -126,6 +127,13 @@ export function SpectatorView({
 
         {/* Activity feed — bottom-left, tappable to expand full history */}
         <ActivityFeed items={activityFeed} expandable />
+
+        {/* Turn announcement banner (slides in/out) */}
+        <TurnBanner
+          playerName={currentPlayer?.name ?? null}
+          playerEmoji={currentPlayer?.token?.emoji ?? null}
+          triggerKey={gameState.currentTurnPlayerId ?? ''}
+        />
 
         {/* Turn banner */}
         <div style={styles.turnBanner}>

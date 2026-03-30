@@ -12,6 +12,7 @@ import { TileEffectOverlay } from './TileEffectOverlay';
 import { MinigameResultsOverlay } from './MinigameResultsOverlay';
 import { Scoreboard } from './Scoreboard';
 import { ActivityFeed } from './ActivityFeed';
+import { TurnBanner } from './TurnBanner';
 
 interface Props {
   gameState: GameState;
@@ -408,6 +409,13 @@ export function GameScreen({
             isSpectator={isSpectator}
           />
         )}
+
+        {/* Turn announcement banner */}
+        <TurnBanner
+          playerName={currentTurnPlayer?.name ?? null}
+          playerEmoji={currentTurnPlayer?.token?.emoji ?? null}
+          triggerKey={displayedTurnPlayerId ?? ''}
+        />
 
         {/* Activity feed — bottom-left overlay */}
         <ActivityFeed items={activityFeed} />
