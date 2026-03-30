@@ -3,7 +3,7 @@ import { useState } from 'react';
 const PAGES = [
   {
     title: 'The Goal',
-    body: 'Be the first player to collect the target number of marbles! The host sets the goal (default 10). Earn marbles from special tiles, minigame prizes, or by converting points.',
+    body: 'Be the first player to collect the target number of marbles! The host sets the goal (default 5). Earn marbles from special tiles, minigame prizes, or by converting points.',
     graphic: 'goal',
   },
   {
