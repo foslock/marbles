@@ -805,12 +805,27 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
       smoothCenterOnTile(sourceTile.x, sourceTile.y, PLAYER_ZOOM * 1.1, 400);
     }
 
+    // Play rising sound as the effect bubble lifts off the source tile
+    SFX.tileRise();
+    Haptics.light();
+
     // At ~40% through, pan to target tile
     const panToTargetTimer = setTimeout(() => {
       if (targetTile) {
         smoothCenterOnTile(targetTile.x, targetTile.y, PLAYER_ZOOM * 1.1, 500);
       }
     }, 800);
+
+    // Play falling sound as bubble descends onto the target tile (phase 3 start ~70%)
+    const fallSoundTimer = setTimeout(() => {
+      SFX.tileFall();
+    }, SWAP_DURATION * 0.7);
+
+    // Play landing sound when bubble settles into target tile
+    const landSoundTimer = setTimeout(() => {
+      SFX.tileLand();
+      Haptics.medium();
+    }, SWAP_DURATION * 0.9);
 
     const tick = () => {
       const anim = swapAnimRef.current;
@@ -830,6 +845,8 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
 
     return () => {
       clearTimeout(panToTargetTimer);
+      clearTimeout(fallSoundTimer);
+      clearTimeout(landSoundTimer);
       if (swapRafRef.current) cancelAnimationFrame(swapRafRef.current);
       swapAnimRef.current = null;
     };
