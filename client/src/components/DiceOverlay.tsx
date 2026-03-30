@@ -158,10 +158,12 @@ export function DiceOverlay({
   // When rolledValue/diceValues arrive from server, set target faces
   useEffect(() => {
     if (diceValues && diceValues.length > 0) {
-      // If we're still in a non-idle phase from a previous roll (e.g. back-to-back
+      // If we're still in a completed phase from a previous roll (e.g. back-to-back
       // turn_update + dice_rolled batched by React), reset first so the old dice
-      // state doesn't bleed through.
-      if (phaseRef.current !== 'idle') {
+      // state doesn't bleed through.  But do NOT reset while the active player is
+      // already in the 'rolling' phase from their flick — that would snap the dice
+      // back to the prompt position and kill the animation.
+      if (phaseRef.current !== 'idle' && phaseRef.current !== 'rolling') {
         resetDice();
       }
 
