@@ -74,9 +74,11 @@ export function DiceOverlay({
   const phaseRef = useRef<Phase>('idle');
 
   // How many dice to show — derived from server response when available,
-  // otherwise from modifiers so the idle prompt shows both dice
+  // otherwise from the active player's own modifiers so the idle prompt
+  // shows both dice.  Non-active players must NOT use their own modifiers
+  // here, or they'll see 2 dice when the current roller only threw 1.
   const diceCount = (diceValues && diceValues.length === 2) ? 2
-    : (hasDoubleDice || hasAdvantage) ? 2 : 1;
+    : (isMyTurn && !isSpectator && (hasDoubleDice || hasAdvantage)) ? 2 : 1;
   const diceCountRef = useRef(diceCount);
   diceCountRef.current = diceCount;
 
@@ -514,23 +516,26 @@ export function DiceOverlay({
       ctx.globalAlpha = opacity;
       const dtype = diceTypeRef.current;
 
-      if (currentPhase === 'landed' && count === 2) {
-        ctx.font = 'bold 13px sans-serif';
-        ctx.textAlign = 'center';
-        const labelY = diceRef.current[0].y - 12;
-        if (dtype === 'advantage') {
-          ctx.fillStyle = '#2ecc71';
-          ctx.fillText('Pick one!', w / 2, labelY);
+      // Actionable prompts — only shown to the active player
+      if (active) {
+        if (currentPhase === 'landed' && count === 2) {
+          ctx.font = 'bold 13px sans-serif';
+          ctx.textAlign = 'center';
+          const labelY = diceRef.current[0].y - 12;
+          if (dtype === 'advantage') {
+            ctx.fillStyle = '#2ecc71';
+            ctx.fillText('Pick one!', w / 2, labelY);
+          }
         }
-      }
 
-      if (currentPhase === 'picking') {
-        ctx.font = 'bold 15px sans-serif';
-        ctx.textAlign = 'center';
-        const hintAlpha = 0.6 + 0.4 * Math.abs(Math.sin(now / 750 * Math.PI));
-        ctx.fillStyle = `rgba(243, 156, 18, ${hintAlpha})`;
-        if (pickedDieRef.current == null) {
-          ctx.fillText('Tap a die to pick it!', w / 2, diceRef.current[0].y + DIE_SIZE + 40);
+        if (currentPhase === 'picking') {
+          ctx.font = 'bold 15px sans-serif';
+          ctx.textAlign = 'center';
+          const hintAlpha = 0.6 + 0.4 * Math.abs(Math.sin(now / 750 * Math.PI));
+          ctx.fillStyle = `rgba(243, 156, 18, ${hintAlpha})`;
+          if (pickedDieRef.current == null) {
+            ctx.fillText('Tap a die to pick it!', w / 2, diceRef.current[0].y + DIE_SIZE + 40);
+          }
         }
       }
 
@@ -684,11 +689,12 @@ export function DiceOverlay({
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
       />
-      {/* Modifier badges — only while rolling/landed so non-active players see them */}
+      {/* Modifier badges — use the active roll's diceType for non-active players,
+          and the viewer's own modifiers only during their idle turn. */}
       {(phase === 'rolling' || phase === 'landed' || phase === 'picking' || (isMyTurn && !isSpectator)) && (
         <div style={styles.modifiers}>
-          {hasDoubleDice && <span style={styles.modBadge}>🎲🎲 Double!</span>}
-          {hasAdvantage && <span style={styles.modBadgeGreen}>🎯 Advantage!</span>}
+          {(isMyTurn ? hasDoubleDice : diceType === 'double') && <span style={styles.modBadge}>🎲🎲 Double!</span>}
+          {(isMyTurn ? hasAdvantage : diceType === 'advantage') && <span style={styles.modBadgeGreen}>🎯 Advantage!</span>}
         </div>
       )}
     </div>
