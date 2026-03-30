@@ -28,7 +28,29 @@ export default function App() {
 
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative', userSelect: 'none', WebkitUserSelect: 'none' }}>
-      {!socket.connected && (
+      {/* Reconnecting overlay — blocks ALL touch/click while client is restoring session */}
+      {socket.reconnecting && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 9999,
+          background: 'rgba(10, 25, 47, 0.85)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          touchAction: 'none',
+        }}>
+          <div style={{ color: '#f39c12', fontSize: '18px', fontWeight: 600, marginBottom: '8px' }}>
+            Reconnecting...
+          </div>
+          <div style={{ color: '#8892b0', fontSize: '13px' }}>
+            Please wait while we restore your session
+          </div>
+        </div>
+      )}
+
+      {!socket.connected && !socket.reconnecting && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 1000 }}>
           <div
             onClick={() => socket.connectionError && setShowConnErrDetails((v) => !v)}
@@ -68,6 +90,8 @@ export default function App() {
           connected={socket.connected}
           onCreateSession={socket.createSession}
           onJoinSession={socket.joinSession}
+          globalStats={socket.globalStats}
+          onRequestGlobalStats={socket.requestGlobalStats}
         />
       )}
 

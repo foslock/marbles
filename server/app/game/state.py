@@ -5,11 +5,15 @@ with periodic persistence to the database.
 """
 
 import random
+import time
 import uuid
 from dataclasses import dataclass, field
 
 from ..board.generator import Board, generate_board
 from ..board.tokens import assign_tokens
+
+# Sessions with no activity for this long are considered expired
+SESSION_EXPIRY_SECONDS = 4 * 60 * 60  # 4 hours
 
 
 @dataclass
@@ -49,6 +53,15 @@ class GameSession:
     turn_number: int = 0
     board_seed: int | None = None
     winner_id: str | None = None
+    last_activity: float = field(default_factory=time.time)
+
+    def touch(self):
+        """Update last activity timestamp."""
+        self.last_activity = time.time()
+
+    def is_expired(self) -> bool:
+        """Check if session has been inactive for too long."""
+        return (time.time() - self.last_activity) > SESSION_EXPIRY_SECONDS
 
     @property
     def current_turn_player_id(self) -> str | None:
@@ -250,6 +263,21 @@ class SessionManager:
                 sids.append(player.sid)
 
         return sids
+
+    def get_expired_sessions(self) -> list[GameSession]:
+        """Return sessions that have exceeded the inactivity timeout."""
+        return [s for s in self.sessions.values() if s.state != "finished" and s.is_expired()]
+
+    def get_all_player_stats(self) -> dict:
+        """Aggregate marbles and points across all in-memory sessions."""
+        total_marbles = 0
+        total_points = 0
+        for session in self.sessions.values():
+            for player in session.players.values():
+                if player.role == "player":
+                    total_marbles += player.marbles
+                    total_points += player.points
+        return {"totalMarbles": total_marbles, "totalPoints": total_points}
 
 
 # Global singleton

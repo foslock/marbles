@@ -6,7 +6,7 @@ import logging
 from collections import deque
 import socketio
 
-from .game.state import session_manager, PlayerState
+from .game.state import session_manager, PlayerState, SESSION_EXPIRY_SECONDS
 from .game.passphrase import generate_passphrase
 from .game.effects import process_tile_effect, apply_choice_effect, swap_tile_effect, check_marble_conversion
 from .game.battle import check_for_battle
@@ -24,6 +24,56 @@ sio = socketio.AsyncServer(
     async_mode="asgi",
     cors_allowed_origins=[],  # Allow all for dev; restrict in production
 )
+
+
+# ── Periodic session expiry task ────────────────────────────────────────────
+
+_expiry_task: asyncio.Task | None = None
+
+
+async def _session_expiry_loop():
+    """Periodically check for and clean up expired sessions (no activity for 4 hours)."""
+    while True:
+        await asyncio.sleep(300)  # Check every 5 minutes
+        try:
+            expired = session_manager.get_expired_sessions()
+            for session in expired:
+                logger.info(f"Expiring inactive session {session.id} (passphrase={session.passphrase})")
+                # Notify connected players
+                await sio.emit("session_expired", {
+                    "message": "This game session has expired due to inactivity.",
+                }, room=session.id)
+                # Persist final state before deletion
+                await _persist_session(session)
+                # Clean up
+                session_manager.delete_session(session.id)
+                await sio.close_room(session.id)
+
+            # Clean up abandoned lobbies (all players disconnected for 10+ minutes)
+            # and finished sessions that have been sitting for 5+ minutes
+            import time
+            for session in list(session_manager.sessions.values()):
+                if session.state == "lobby":
+                    all_disconnected = all(
+                        not p.is_connected for p in session.players.values() if not p.is_cpu
+                    )
+                    if all_disconnected and (time.time() - session.last_activity) > 600:
+                        logger.info(f"Cleaning up abandoned lobby {session.id}")
+                        session_manager.delete_session(session.id)
+                        await sio.close_room(session.id)
+                elif session.state == "finished" and (time.time() - session.last_activity) > 300:
+                    logger.info(f"Cleaning up finished session {session.id}")
+                    session_manager.delete_session(session.id)
+                    await sio.close_room(session.id)
+        except Exception as e:
+            logger.error(f"Error in session expiry loop: {e}", exc_info=True)
+
+
+def start_expiry_task():
+    """Start the background session expiry task. Called once at server startup."""
+    global _expiry_task
+    if _expiry_task is None or _expiry_task.done():
+        _expiry_task = asyncio.create_task(_session_expiry_loop())
 
 
 async def _persist_session(session):
@@ -62,6 +112,8 @@ async def _persist_event(session_id, turn_number, event_type, player_id, data):
 @sio.event
 async def connect(sid, environ):
     logger.info(f"[connect] {sid}")
+    # Start the expiry task on first connection (ensures event loop exists)
+    start_expiry_task()
 
 
 @sio.event
@@ -93,6 +145,7 @@ async def create_session(sid, data):
             break
 
     session = session_manager.create_session(passphrase, target_marbles)
+    session.touch()
 
     # Add host as player
     name = data.get("name", "Player 1")[:12]
@@ -135,6 +188,7 @@ async def join_session(sid, data):
         return
 
     player = session_manager.add_player(session.id, sid, name, role)
+    session.touch()
 
     await sio.enter_room(sid, session.id)
 
@@ -208,7 +262,17 @@ async def reconnect_session(sid, data):
 
     session = session_manager.get_session_by_passphrase(passphrase)
     if not session:
-        await sio.emit("error", {"message": "Session not found."}, to=sid)
+        await sio.emit("error", {"message": "Session not found. It may have expired."}, to=sid)
+        return
+
+    # Check if the session has expired
+    if session.is_expired():
+        await sio.emit("session_expired", {
+            "message": "This game session has expired due to inactivity.",
+        }, to=sid)
+        # Clean up the expired session
+        session_manager.delete_session(session.id)
+        await sio.close_room(session.id)
         return
 
     player = session.players.get(player_id)
@@ -220,6 +284,7 @@ async def reconnect_session(sid, data):
     player.sid = sid
     player.is_connected = True
     session_manager.sid_to_player[sid] = (session.id, player.id)
+    session.touch()
 
     await sio.enter_room(sid, session.id)
 
@@ -264,6 +329,7 @@ async def start_game(sid, data):
     if not result:
         await sio.emit("error", {"message": "Need at least 2 players to start."}, to=sid)
         return
+    session.touch()
 
     await sio.emit("game_started", session.to_game_dict(), room=session_id_actual)
 
@@ -380,6 +446,47 @@ async def lobby_tap(sid, data):
 
 
 @sio.event
+async def get_global_stats(sid, data):
+    """Return aggregate marbles and points across all sessions (in-memory + DB)."""
+    # Start with in-memory stats
+    mem_stats = session_manager.get_all_player_stats()
+    total_marbles = mem_stats["totalMarbles"]
+    total_points = mem_stats["totalPoints"]
+
+    # Add historical stats from DB (finished sessions not in memory)
+    try:
+        from .database import async_session as db_session_maker
+        from sqlalchemy import select, func
+        from .models.player import LtmPlayer
+        from .models.session import LtmSession
+
+        async with db_session_maker() as db:
+            # Get stats from DB sessions that are NOT currently in memory
+            in_memory_ids = list(session_manager.sessions.keys())
+            query = (
+                select(
+                    func.coalesce(func.sum(LtmPlayer.marbles), 0),
+                    func.coalesce(func.sum(LtmPlayer.points), 0),
+                )
+                .join(LtmSession, LtmPlayer.session_id == LtmSession.id)
+                .where(LtmPlayer.role == "player")
+            )
+            if in_memory_ids:
+                query = query.where(LtmSession.id.notin_(in_memory_ids))
+            result = await db.execute(query)
+            row = result.one()
+            total_marbles += int(row[0])
+            total_points += int(row[1])
+    except Exception as e:
+        logger.warning(f"Failed to fetch DB stats: {e}")
+
+    await sio.emit("global_stats", {
+        "totalMarbles": total_marbles,
+        "totalPoints": total_points,
+    }, to=sid)
+
+
+@sio.event
 async def end_game(sid, data):
     """Host forcibly ends the game, clearing all server state."""
     player_mapping = session_manager.sid_to_player.get(sid)
@@ -402,6 +509,16 @@ async def end_game(sid, data):
     await sio.close_room(session_id)
 
 
+async def _check_session_valid(sid, session) -> bool:
+    """Return True if session is valid for play. Emits error and returns False if expired."""
+    if session and session.is_expired():
+        await sio.emit("session_expired", {
+            "message": "This game session has expired due to inactivity.",
+        }, to=sid)
+        return False
+    return True
+
+
 ## ── Shared turn-action functions ────────────────────────────────────────────
 # These are the core game-logic operations used by both human socket handlers
 # and CPU turns.  Handlers validate the caller, then delegate here.
@@ -413,6 +530,7 @@ async def _do_roll_dice(session, player_id):
     Returns a dict: {type, roll, dice, reachable, dizzy, shortStop}
     For advantage type, reachable is [] — caller must go through _do_choose_advantage.
     """
+    session.touch()
     player = session.players[player_id]
 
     # ── Advantage roll ──────────────────────────────────────────────────────
@@ -654,6 +772,8 @@ async def roll_dice(sid, data):
     session_id, player_id = player_mapping
     session = session_manager.get_session(session_id)
     if not session or session.state != "playing":
+        return
+    if not await _check_session_valid(sid, session):
         return
 
     if session.current_turn_player_id != player_id:

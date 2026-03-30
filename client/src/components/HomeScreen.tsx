@@ -122,14 +122,23 @@ interface Props {
   connected: boolean;
   onCreateSession: (name: string, targetMarbles: number) => void;
   onJoinSession: (passphrase: string, name: string, role: string) => void;
+  globalStats: { totalMarbles: number; totalPoints: number } | null;
+  onRequestGlobalStats: () => void;
 }
 
-export function HomeScreen({ connected, onCreateSession, onJoinSession }: Props) {
+export function HomeScreen({ connected, onCreateSession, onJoinSession, globalStats, onRequestGlobalStats }: Props) {
   const [mode, setMode] = useState<'menu' | 'create' | 'join' | 'playtest' | 'playtest-playing' | 'playtest-done'>('menu');
   const [name, setName] = useState('');
   const [passphrase, setPassphrase] = useState('');
   const [role, setRole] = useState<'player' | 'spectator'>('player');
   const [showHowToPlay, setShowHowToPlay] = useState(false);
+
+  // Request global stats when connected and on home screen
+  useEffect(() => {
+    if (connected && mode === 'menu') {
+      onRequestGlobalStats();
+    }
+  }, [connected, mode, onRequestGlobalStats]);
 
   // Playtest state
   const [selectedMinigame, setSelectedMinigame] = useState(PLAYTEST_MINIGAMES[0].type);
@@ -227,42 +236,49 @@ export function HomeScreen({ connected, onCreateSession, onJoinSession }: Props)
       </div>
 
       {mode === 'menu' && (
-        <div style={styles.buttonGroup}>
-          <button
-            className="ltm-btn-hover ltm-primary-hover"
-            style={{
-              ...styles.primaryButton,
-              ...(!connected ? styles.disabledButton : {}),
-              animation: connected ? 'ltmBtnGlow 3s ease-in-out infinite' : 'none',
-            }}
-            onClick={() => connected && setMode('create')}
-            disabled={!connected}
-          >
-            {connected ? 'Host a Game' : 'Connecting\u2026'}
-          </button>
-          <button
-            className="ltm-btn-hover ltm-secondary-hover"
-            style={{ ...styles.secondaryButton, ...(!connected ? styles.disabledButton : {}) }}
-            onClick={() => connected && setMode('join')}
-            disabled={!connected}
-          >
-            Join a Game
-          </button>
-          <button
-            className="ltm-btn-hover ltm-htp-hover"
-            style={styles.howToPlayButton}
-            onClick={() => setShowHowToPlay(true)}
-          >
-            How to Play
-          </button>
-          <button
-            className="ltm-btn-hover ltm-playtest-hover"
-            style={styles.playtestButton}
-            onClick={() => setMode('playtest')}
-          >
-            Playtest Minigames
-          </button>
-        </div>
+        <>
+          <div style={styles.buttonGroup}>
+            <button
+              className="ltm-btn-hover ltm-primary-hover"
+              style={{
+                ...styles.primaryButton,
+                ...(!connected ? styles.disabledButton : {}),
+                animation: connected ? 'ltmBtnGlow 3s ease-in-out infinite' : 'none',
+              }}
+              onClick={() => connected && setMode('create')}
+              disabled={!connected}
+            >
+              {connected ? 'Host a Game' : 'Connecting\u2026'}
+            </button>
+            <button
+              className="ltm-btn-hover ltm-secondary-hover"
+              style={{ ...styles.secondaryButton, ...(!connected ? styles.disabledButton : {}) }}
+              onClick={() => connected && setMode('join')}
+              disabled={!connected}
+            >
+              Join a Game
+            </button>
+            <button
+              className="ltm-btn-hover ltm-htp-hover"
+              style={styles.howToPlayButton}
+              onClick={() => setShowHowToPlay(true)}
+            >
+              How to Play
+            </button>
+            <button
+              className="ltm-btn-hover ltm-playtest-hover"
+              style={styles.playtestButton}
+              onClick={() => setMode('playtest')}
+            >
+              Playtest Minigames
+            </button>
+          </div>
+          {globalStats && (globalStats.totalMarbles > 0 || globalStats.totalPoints > 0) && (
+            <div style={styles.globalStats}>
+              {globalStats.totalMarbles} marbles and {globalStats.totalPoints.toLocaleString()} points collected
+            </div>
+          )}
+        </>
       )}
 
       {mode === 'create' && (
@@ -671,5 +687,14 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#f39c12',
     fontSize: '64px',
     fontWeight: 800,
+  },
+  globalStats: {
+    color: '#8892b0',
+    fontSize: '12px',
+    textAlign: 'center' as const,
+    marginTop: '24px',
+    position: 'relative' as const,
+    zIndex: 1,
+    opacity: 0.7,
   },
 };
