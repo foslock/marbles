@@ -693,8 +693,6 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
 
     const totalDuration = (pathCoords.length - 1) * MOVE_SPEED;
     let lastHop = -1;
-    let playedRise = false;
-    let playedFall = false;
 
     const tick = (now: number) => {
       // ── Landing phase ────────────────────────────────────────────────────
@@ -728,18 +726,6 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
       const anim = animRef.current;
       const elapsed = now - anim.startTime;
       anim.progress = Math.min(elapsed / MOVE_SPEED, pathCoords.length - 1);
-
-      // Rising sound at the start of movement
-      if (!playedRise && elapsed > 0) {
-        playedRise = true;
-        SFX.tileRise();
-      }
-
-      // Falling sound when approaching the last segment
-      if (!playedFall && elapsed >= totalDuration - MOVE_SPEED) {
-        playedFall = true;
-        SFX.tileFall();
-      }
 
       const currentHop = Math.floor(anim.progress);
       if (currentHop > lastHop) {
