@@ -8,6 +8,7 @@ interface Props {
 }
 
 const PODIUM_COLORS = ['#f39c12', '#bdc3c7', '#cd7f32'];
+const MEDAL_ICONS = ['🥇', '🥈', '🥉'];
 const DISMISS_DELAY_MS = 3000;
 const AUTO_DISMISS_MS = 10000;
 
@@ -81,7 +82,7 @@ export function MinigameResultsOverlay({ results, onClose }: Props) {
                 {/* Player info above podium */}
                 <div style={styles.podiumPlayerInfo}>
                   <span style={{ ...styles.podiumEmoji, fontSize: layoutIdx === 1 ? '28px' : '22px' }}>
-                    {layoutIdx === 1 ? '👑' : ''}
+                    {MEDAL_ICONS[r.rank - 1] || ''}
                   </span>
                   <span
                     style={{
