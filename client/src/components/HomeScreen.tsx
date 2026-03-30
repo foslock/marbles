@@ -16,8 +16,11 @@ if (typeof document !== 'undefined' && !document.getElementById(ANIM_STYLE_ID)) 
       100% { background-position: -200% 50%; }
     }
     @keyframes ltmFloat {
-      0%, 100% { transform: translateY(0) scale(1); opacity: 0.15; }
-      50% { transform: translateY(-30px) scale(1.1); opacity: 0.25; }
+      0%   { transform: translate(0, 0) scale(1) rotate(0deg); opacity: 0.15; }
+      25%  { transform: translate(15px, -25px) scale(1.08) rotate(5deg); opacity: 0.22; }
+      50%  { transform: translate(-10px, -50px) scale(1.15) rotate(-3deg); opacity: 0.28; }
+      75%  { transform: translate(20px, -20px) scale(1.05) rotate(4deg); opacity: 0.2; }
+      100% { transform: translate(0, 0) scale(1) rotate(0deg); opacity: 0.15; }
     }
     @keyframes ltmBtnGlow {
       0%   { box-shadow: 0 4px 15px rgba(231, 76, 60, 0.3); }
@@ -110,8 +113,8 @@ const BG_MARBLES = Array.from({ length: 12 }, (_, i) => ({
   left: `${5 + (i * 8) % 90}%`,
   top: `${10 + ((i * 17 + 3) % 80)}%`,
   size: 10 + (i % 4) * 6,
-  delay: i * 1.2,
-  duration: 4 + (i % 3) * 2,
+  delay: 0,
+  duration: 6 + (i % 4) * 3,
   color: ['#f39c12', '#e74c3c', '#9b59b6', '#3498db', '#2ecc71', '#e67e22'][i % 6],
 }));
 
