@@ -100,6 +100,10 @@ export function SizeMatch({ onScoreUpdate, config }: MinigameComponentProps) {
           setTarget(makeOval(rng.current));
           playerScaleRef.current = 0.5;
           setPlayerScale(0.5);
+          // Invalidate any active drag/pinch so held fingers must
+          // start a new gesture to change the scale
+          dragRef.current = null;
+          pinchRef.current = null;
           setMatched(false);
         }, 600);
       }

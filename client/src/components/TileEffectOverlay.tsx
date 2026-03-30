@@ -32,7 +32,7 @@ const EFFECT_ICONS: Record<string, string> = {
   fortune_cookie: '🥠',
 };
 
-const MIN_DISPLAY_MS = 3000;
+const MIN_DISPLAY_MS = 1000;
 const AUTO_DISMISS_MS = 10000;
 
 export function TileEffectOverlay({ effect, playerToken, onClose }: Props) {

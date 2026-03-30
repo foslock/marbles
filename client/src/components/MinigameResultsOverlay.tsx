@@ -9,7 +9,7 @@ interface Props {
 
 const PODIUM_COLORS = ['#f39c12', '#bdc3c7', '#cd7f32'];
 const MEDAL_ICONS = ['🥇', '🥈', '🥉'];
-const DISMISS_DELAY_MS = 3000;
+const DISMISS_DELAY_MS = 1000;
 const AUTO_DISMISS_MS = 10000;
 
 export function MinigameResultsOverlay({ results, onClose }: Props) {
