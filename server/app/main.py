@@ -1,13 +1,23 @@
 """Main entry point for the Losing Their Marbles server."""
 
+from contextlib import asynccontextmanager
+
 import socketio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
+from .database import init_db
 from .socketio_handlers import sio
 
-app = FastAPI(title="Losing Their Marbles", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await init_db()
+    yield
+
+
+app = FastAPI(title="Losing Their Marbles", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
