@@ -78,10 +78,15 @@ def process_tile_effect(
             result["marblesGained"] = 1
 
         case "steal_points":
-            result["requiresChoice"] = True
-            result["choiceType"] = "steal_points"
-            result["message"] = "Choose a player to steal points from!"
-            result["options"] = _get_other_player_options(session, player)
+            eligible = [p for p in session.get_players() if p.id != player.id and p.points > 0]
+            if eligible:
+                result["requiresChoice"] = True
+                result["choiceType"] = "steal_points"
+                result["message"] = "Choose a player to steal points from!"
+                result["options"] = [{"id": p.id, "name": p.name, "marbles": p.marbles, "points": p.points} for p in eligible]
+            else:
+                result["message"] = "No one has points to steal... tough luck."
+                result["type"] = "steal_points_empty"
 
         case "steal_marble":
             eligible = [p for p in session.get_players() if p.id != player.id and p.marbles > 0]
