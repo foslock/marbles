@@ -461,6 +461,10 @@ export function useSocket() {
     emitRef.current('update_target_marbles', { targetMarbles });
   }, []);
 
+  const updateCpuSpeed = useCallback((cpuSpeed: string) => {
+    emitRef.current('update_cpu_speed', { cpuSpeed });
+  }, []);
+
   const addCpuPlayer = useCallback(() => {
     emitRef.current('add_cpu_player', {});
   }, []);
@@ -577,6 +581,7 @@ export function useSocket() {
     turnComplete,
     endGame,
     updateTargetMarbles,
+    updateCpuSpeed,
     addCpuPlayer,
     removeCpuPlayer,
     lobbyTap,

@@ -41,6 +41,7 @@ class GameSession:
     host_id: str | None = None
     state: str = "lobby"  # lobby, playing, finished
     target_marbles: int = 5
+    cpu_speed: str = "fast"  # "slow", "normal", or "fast"
     players: dict[str, PlayerState] = field(default_factory=dict)
     board: Board | None = None
     turn_order: list[str] = field(default_factory=list)
@@ -80,6 +81,7 @@ class GameSession:
             "hostId": self.host_id,
             "state": self.state,
             "targetMarbles": self.target_marbles,
+            "cpuSpeed": self.cpu_speed,
             "players": [
                 {
                     "id": p.id,
@@ -99,6 +101,7 @@ class GameSession:
             "hostId": self.host_id,
             "state": self.state,
             "targetMarbles": self.target_marbles,
+            "cpuSpeed": self.cpu_speed,
             "board": self.board.to_dict() if self.board else None,
             "turnOrder": self.turn_order,
             "currentTurnIndex": self.current_turn_index,
