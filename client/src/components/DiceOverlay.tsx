@@ -444,11 +444,7 @@ export function DiceOverlay({
         ctx.font = 'bold 13px sans-serif';
         ctx.textAlign = 'center';
         const labelY = diceRef.current[0].y - 12;
-        if (dtype === 'double') {
-          const sum = (diceRef.current[0].targetFace || 0) + (diceRef.current[1].targetFace || 0);
-          ctx.fillStyle = '#3498db';
-          ctx.fillText(`Sum: ${sum}`, w / 2, labelY);
-        } else if (dtype === 'advantage') {
+        if (dtype === 'advantage') {
           ctx.fillStyle = '#2ecc71';
           ctx.fillText('Pick one!', w / 2, labelY);
         }
