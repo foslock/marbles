@@ -67,6 +67,7 @@ export function GameScreen({
   getDiagnostics,
 }: Props) {
   const [showScoreboard, setShowScoreboard] = useState(false);
+  const [showTurnOrder, setShowTurnOrder] = useState(false);
   const [moveChosen, setMoveChosen] = useState(false);
 
   // Reset moveChosen when diceResult changes (new turn / new roll)
@@ -318,13 +319,48 @@ export function GameScreen({
     <div style={styles.container}>
       {/* Top bar */}
       <div style={styles.topBar}>
-        <div style={styles.turnInfo}>
-          <span style={styles.turnLabel}>Turn {gameState.turnNumber}</span>
+        <div
+          style={styles.turnInfo}
+          onClick={() => setShowTurnOrder((v) => !v)}
+        >
+          <span style={styles.turnLabel}>Turn {gameState.turnNumber} ▾</span>
           <span style={styles.currentPlayer}>
             {currentTurnPlayer
               ? `${currentTurnPlayer.token?.emoji || '?'} ${currentTurnPlayer.name}'s turn`
               : ''}
           </span>
+          {showTurnOrder && (
+            <>
+            <div
+              style={styles.turnOrderBackdrop}
+              onClick={(e) => { e.stopPropagation(); setShowTurnOrder(false); }}
+            />
+            <div style={styles.turnOrderDropdown}>
+              {gameState.turnOrder.map((pid, idx) => {
+                const p = gameState.players[pid];
+                if (!p || p.role !== 'player') return null;
+                const isCurrent = pid === displayedTurnPlayerId;
+                return (
+                  <div
+                    key={pid}
+                    style={{
+                      ...styles.turnOrderRow,
+                      ...(isCurrent ? styles.turnOrderRowActive : {}),
+                    }}
+                  >
+                    <span style={styles.turnOrderIndex}>{idx + 1}</span>
+                    <span style={styles.turnOrderEmoji}>{p.token?.emoji || '?'}</span>
+                    <span style={{
+                      ...styles.turnOrderName,
+                      ...(isCurrent ? styles.turnOrderNameActive : {}),
+                    }}>{p.name}</span>
+                    {isCurrent && <span style={styles.turnOrderArrow}>◀</span>}
+                  </div>
+                );
+              })}
+            </div>
+            </>
+          )}
         </div>
         {myPlayer && myPlayer.role === 'player' && (
           <div style={styles.myScore}>
@@ -465,6 +501,9 @@ const styles: Record<string, React.CSSProperties> = {
   turnInfo: {
     display: 'flex',
     flexDirection: 'column',
+    cursor: 'pointer',
+    position: 'relative',
+    userSelect: 'none',
   },
   turnLabel: {
     fontSize: '11px',
@@ -570,5 +609,57 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#ccd6f6',
     fontSize: '15px',
     cursor: 'pointer',
+  },
+  turnOrderBackdrop: {
+    position: 'fixed',
+    inset: 0,
+    zIndex: 49,
+  },
+  turnOrderDropdown: {
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    marginTop: '4px',
+    background: '#1a2a4a',
+    border: '1px solid #233554',
+    borderRadius: '10px',
+    padding: '6px 0',
+    minWidth: '180px',
+    maxHeight: '240px',
+    overflowY: 'auto',
+    zIndex: 50,
+    boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+  },
+  turnOrderRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '6px 12px',
+  },
+  turnOrderRowActive: {
+    background: 'rgba(46, 204, 113, 0.12)',
+  },
+  turnOrderIndex: {
+    fontSize: '11px',
+    color: '#5a6a8a',
+    width: '14px',
+    textAlign: 'right' as const,
+  },
+  turnOrderEmoji: {
+    fontSize: '18px',
+    lineHeight: 1,
+  },
+  turnOrderName: {
+    fontSize: '13px',
+    color: '#a8b2d1',
+    flex: 1,
+  },
+  turnOrderNameActive: {
+    color: '#2ecc71',
+    fontWeight: 600,
+  },
+  turnOrderArrow: {
+    fontSize: '10px',
+    color: '#2ecc71',
   },
 };
