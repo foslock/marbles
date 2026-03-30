@@ -181,7 +181,9 @@ export function HomeScreen({ connected, onCreateSession, onJoinSession }: Props)
   }, [mode, playtestPhase, playtestTimeLeft]);
 
   const handlePlaytestScore = (score: number) => {
-    playtestScoreRef.current = score;
+    if (score > playtestScoreRef.current) {
+      playtestScoreRef.current = score;
+    }
   };
 
   const handleCreate = () => {
