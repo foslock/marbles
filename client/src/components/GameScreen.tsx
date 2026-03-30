@@ -190,10 +190,10 @@ export function GameScreen({
   );
 
   useEffect(() => {
-    if (!effectToShow && !tileEffect && !minigameResults && !tileSwapAnimation) {
+    if (!effectToShow && !tileEffect && !minigameResults && !tileSwapAnimation && !activeMoveAnimation) {
       setDisplayedTurnPlayerId(gameState.currentTurnPlayerId);
     }
-  }, [gameState.currentTurnPlayerId, effectToShow, tileEffect, minigameResults, tileSwapAnimation]);
+  }, [gameState.currentTurnPlayerId, effectToShow, tileEffect, minigameResults, tileSwapAnimation, activeMoveAnimation]);
 
   // ── Derived values ───────────────────────────────────────────────────────
   const myPlayer = playerId ? gameState.players[playerId] : null;

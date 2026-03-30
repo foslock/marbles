@@ -73,6 +73,13 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
   const [scale, setScale] = useState(initialScale);
   const dragRef = useRef({ dragging: false, startX: 0, startY: 0, offsetX: 0, offsetY: 0 });
 
+  // Stable refs for values used in animation effects (avoids restarting animations
+  // when these props change mid-flight).
+  const activePlayerIdRef = useRef(activePlayerId);
+  activePlayerIdRef.current = activePlayerId;
+  const myPlayerIdRef = useRef(myPlayerId);
+  myPlayerIdRef.current = myPlayerId;
+
   // Movement animation state
   const animRef = useRef<{
     playerId: string;
@@ -665,8 +672,8 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
           const destTile = board.tiles[String(lastTileId)];
           if (destTile) {
             if (
-              moveAnimation.playerId === myPlayerId ||
-              moveAnimation.playerId === activePlayerId
+              moveAnimation.playerId === myPlayerIdRef.current ||
+              moveAnimation.playerId === activePlayerIdRef.current
             ) {
               smoothCenterOnTile(destTile.x, destTile.y, PLAYER_ZOOM, 400);
             }
@@ -691,8 +698,8 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
 
       // Follow the moving token with the camera
       if (
-        moveAnimation.playerId === myPlayerId ||
-        moveAnimation.playerId === activePlayerId
+        moveAnimation.playerId === myPlayerIdRef.current ||
+        moveAnimation.playerId === activePlayerIdRef.current
       ) {
         const seg = Math.min(Math.floor(anim.progress), pathCoords.length - 2);
         const t = anim.progress - seg;
@@ -726,7 +733,7 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
       animRef.current = null;
       landingRef.current = null;
     };
-  }, [moveAnimation, board, onAnimationComplete, myPlayerId, activePlayerId, centerOnTile, smoothCenterOnTile]);
+  }, [moveAnimation, board, onAnimationComplete, centerOnTile, smoothCenterOnTile]);
 
   // Tile swap animation — camera follows the effect bubble
   useEffect(() => {

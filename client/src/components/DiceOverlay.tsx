@@ -71,8 +71,10 @@ export function DiceOverlay({
   const [phase, setPhase] = useState<Phase>('idle');
   const phaseRef = useRef<Phase>('idle');
 
-  // How many dice to show
-  const diceCount = (diceValues && diceValues.length === 2) ? 2 : 1;
+  // How many dice to show — derived from server response when available,
+  // otherwise from modifiers so the idle prompt shows both dice
+  const diceCount = (diceValues && diceValues.length === 2) ? 2
+    : (hasDoubleDice || hasAdvantage) ? 2 : 1;
   const diceCountRef = useRef(diceCount);
   diceCountRef.current = diceCount;
 
@@ -142,7 +144,10 @@ export function DiceOverlay({
     setPhase('idle');
   }, [centerDice]);
 
-  useEffect(() => { centerDice(); }, [centerDice]);
+  // Re-center when dice count changes (modifier gained/lost between turns)
+  useEffect(() => {
+    if (phaseRef.current === 'idle') centerDice();
+  }, [diceCount, centerDice]);
 
   // When rolledValue/diceValues arrive from server, set target faces
   useEffect(() => {
@@ -247,6 +252,54 @@ export function DiceOverlay({
           }
 
           if (!d.settled) allSettled = false;
+        }
+
+        // Die-to-die collision (AABB overlap + elastic response)
+        if (count === 2) {
+          const a = diceRef.current[0];
+          const b = diceRef.current[1];
+          if (!a.settled || !b.settled) {
+            const overlapX = (DIE_SIZE) - Math.abs((a.x + DIE_SIZE / 2) - (b.x + DIE_SIZE / 2));
+            const overlapY = (DIE_SIZE) - Math.abs((a.y + DIE_SIZE / 2) - (b.y + DIE_SIZE / 2));
+            if (overlapX > 0 && overlapY > 0) {
+              // Separate along the axis of least overlap
+              const cx = (a.x + DIE_SIZE / 2) - (b.x + DIE_SIZE / 2);
+              const cy = (a.y + DIE_SIZE / 2) - (b.y + DIE_SIZE / 2);
+              if (overlapX < overlapY) {
+                const sign = cx >= 0 ? 1 : -1;
+                const push = overlapX / 2;
+                if (!a.settled) a.x += sign * push;
+                if (!b.settled) b.x -= sign * push;
+                // Swap and dampen x velocities
+                if (!a.settled && !b.settled) {
+                  const tmpVx = a.vx;
+                  a.vx = b.vx * BOUNCE;
+                  b.vx = tmpVx * BOUNCE;
+                } else if (!a.settled) {
+                  a.vx = -a.vx * BOUNCE;
+                } else {
+                  b.vx = -b.vx * BOUNCE;
+                }
+              } else {
+                const sign = cy >= 0 ? 1 : -1;
+                const push = overlapY / 2;
+                if (!a.settled) a.y += sign * push;
+                if (!b.settled) b.y -= sign * push;
+                if (!a.settled && !b.settled) {
+                  const tmpVy = a.vy;
+                  a.vy = b.vy * BOUNCE;
+                  b.vy = tmpVy * BOUNCE;
+                } else if (!a.settled) {
+                  a.vy = -a.vy * BOUNCE;
+                } else {
+                  b.vy = -b.vy * BOUNCE;
+                }
+              }
+              // Add angular spin from collision
+              if (!a.settled) a.angularV += (Math.random() - 0.5) * 0.15;
+              if (!b.settled) b.angularV += (Math.random() - 0.5) * 0.15;
+            }
+          }
         }
 
         if (allSettled) {
@@ -358,8 +411,8 @@ export function DiceOverlay({
         const half = DIE_SIZE / 2;
         const cornerR = 10;
 
-        // Pulsing glow for idle (only on first die)
-        if (glowRadius > 0 && i === 0) {
+        // Pulsing glow for idle
+        if (glowRadius > 0) {
           ctx.shadowColor = '#f39c12';
           ctx.shadowBlur = glowRadius;
           ctx.beginPath();
@@ -466,7 +519,7 @@ export function DiceOverlay({
         ctx.font = 'bold 15px sans-serif';
         ctx.textAlign = 'center';
         ctx.fillStyle = `rgba(243, 156, 18, ${hintAlpha})`;
-        ctx.fillText('Roll Dice', w / 2, diceRef.current[0].y + DIE_SIZE + 26);
+        ctx.fillText(count === 2 ? 'Roll Dice' : 'Roll Die', w / 2, diceRef.current[0].y + DIE_SIZE + 26);
       }
 
       rafRef.current = requestAnimationFrame(tick);
@@ -533,8 +586,17 @@ export function DiceOverlay({
     const pos = getCanvasPos(e.clientX, e.clientY);
     const now = performance.now();
 
-    diceRef.current[0].x = pos.x - g.offsetX - DIE_SIZE / 2;
-    diceRef.current[0].y = pos.y - g.offsetY - DIE_SIZE / 2;
+    const newX = pos.x - g.offsetX - DIE_SIZE / 2;
+    const newY = pos.y - g.offsetY - DIE_SIZE / 2;
+    const dx = newX - diceRef.current[0].x;
+    const dy = newY - diceRef.current[0].y;
+    diceRef.current[0].x = newX;
+    diceRef.current[0].y = newY;
+    // Move second die in tandem during drag
+    if (diceCountRef.current === 2) {
+      diceRef.current[1].x += dx;
+      diceRef.current[1].y += dy;
+    }
 
     g.trail.push({ x: pos.x, y: pos.y, t: now });
     if (g.trail.length > 5) g.trail.shift();
