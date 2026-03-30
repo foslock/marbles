@@ -32,24 +32,20 @@ export function PlayerHUD({ player }: Props) {
         </div>
       </div>
 
-      {(player.modifiers.rerolls > 0 ||
+      {(player.modifiers.advantage > 0 ||
         player.modifiers.protection > 0 ||
         player.modifiers.double_dice > 0 ||
-        player.modifiers.worst_dice > 0 ||
         player.modifiers.short_stop > 0 ||
         player.modifiers.dizzy > 0) && (
         <div style={styles.modifiers}>
-          {player.modifiers.rerolls > 0 && (
-            <span style={styles.mod}>🔄 {player.modifiers.rerolls}</span>
+          {player.modifiers.advantage > 0 && (
+            <span style={styles.modGood}>🎯 Adv {player.modifiers.advantage}</span>
           )}
           {player.modifiers.protection > 0 && (
             <span style={styles.mod}>🛡️ {player.modifiers.protection}</span>
           )}
           {player.modifiers.double_dice > 0 && (
             <span style={styles.modGood}>🎲🎲</span>
-          )}
-          {player.modifiers.worst_dice > 0 && (
-            <span style={styles.modBad}>🎲↓</span>
           )}
           {player.modifiers.short_stop > 0 && (
             <span style={styles.modGood}>🎯</span>

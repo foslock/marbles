@@ -48,16 +48,16 @@ async def run_cpu_turn(sio, session, player, get_reachable_fn, check_battle_fn):
     await asyncio.sleep(random.uniform(1.8, 3.0))
 
     # ── Roll dice ────────────────────────────────────────────────────────────
-    if player.modifiers.get("double_dice", 0) > 0:
+    if player.modifiers.get("advantage", 0) > 0:
+        r1, r2 = random.randint(1, 6), random.randint(1, 6)
+        roll = max(r1, r2)  # CPU always picks the higher die
+        player.modifiers["advantage"] -= 1
+        dice_info = {"roll": roll, "dice": [r1, r2], "type": "advantage"}
+    elif player.modifiers.get("double_dice", 0) > 0:
         r1, r2 = random.randint(1, 6), random.randint(1, 6)
         roll = r1 + r2
         player.modifiers["double_dice"] -= 1
         dice_info = {"roll": roll, "dice": [r1, r2], "type": "double"}
-    elif player.modifiers.get("worst_dice", 0) > 0:
-        r1, r2 = random.randint(1, 6), random.randint(1, 6)
-        roll = min(r1, r2)
-        player.modifiers["worst_dice"] -= 1
-        dice_info = {"roll": roll, "dice": [r1, r2], "type": "worst"}
     else:
         roll = random.randint(1, 6)
         dice_info = {"roll": roll, "dice": [roll], "type": "normal"}

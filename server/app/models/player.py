@@ -25,14 +25,15 @@ class LtmPlayer(Base, TimestampMixin):
     points: Mapped[int] = mapped_column(Integer, default=0)
     is_connected: Mapped[bool] = mapped_column(Boolean, default=True)
 
-    # Modifiers stored as JSON: {"rerolls": 0, "protection": 0, "double_dice": 0, "worst_dice": 0}
+    # Modifiers stored as JSON
     modifiers: Mapped[dict] = mapped_column(
         JSONB,
         default=lambda: {
-            "rerolls": 0,
+            "advantage": 0,
             "protection": 0,
             "double_dice": 0,
-            "worst_dice": 0,
+            "short_stop": 0,
+            "dizzy": 0,
         },
     )
 
