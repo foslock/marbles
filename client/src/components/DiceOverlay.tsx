@@ -184,7 +184,11 @@ export function DiceOverlay({
         Haptics.diceRoll();
       }
     } else if (rolledValue == null) {
-      if (phaseRef.current === 'landed' || phaseRef.current === 'picking') {
+      // Reset from any active phase — not just landed/picking.  If turn_update
+      // clears the dice result while we're still in a spurious auto-roll
+      // (phase === 'rolling'), failing to reset here leaves the die stuck
+      // forever in rolling phase so the player can never roll on their turn.
+      if (phaseRef.current !== 'idle') {
         resetDice();
       }
     }
