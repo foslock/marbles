@@ -8,7 +8,7 @@ import socketio
 
 from .game.state import session_manager, PlayerState
 from .game.passphrase import generate_passphrase
-from .game.effects import process_tile_effect, apply_choice_effect, swap_tile_effect
+from .game.effects import process_tile_effect, apply_choice_effect, swap_tile_effect, check_marble_conversion
 from .game.battle import check_for_battle
 from .game.minigames.base import (
     select_random_minigame,
@@ -446,10 +446,16 @@ async def _do_roll_dice(session, player_id):
         player.modifiers["dizzy"] -= 1
         dice_info["dizzy"] = True
 
+    # Award points equal to the dice roll
+    player.points += dice_info["roll"]
+    new_marbles = check_marble_conversion(player)
+
     await sio.emit("dice_rolled", {
         "playerId": player_id,
         "playerName": player.name,
         **dice_info,
+        "pointsFromRoll": dice_info["roll"],
+        "newMarbles": new_marbles,
         "reachableTiles": reachable,
     }, room=session.id)
 
@@ -486,9 +492,15 @@ async def _do_choose_advantage(session, player_id, chosen_roll):
     if has_dizzy:
         player.modifiers["dizzy"] -= 1
 
+    # Award points equal to the chosen die roll
+    player.points += chosen_roll
+    new_marbles = check_marble_conversion(player)
+
     await sio.emit("advantage_chosen", {
         "playerId": player_id,
         "roll": chosen_roll,
+        "pointsFromRoll": chosen_roll,
+        "newMarbles": new_marbles,
         "reachableTiles": reachable,
         "dizzy": has_dizzy,
     }, room=session.id)

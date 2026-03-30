@@ -19,17 +19,17 @@ logger = logging.getLogger("ltm.cpu")
 # of a normal human score distribution — not dominating, not last.
 _CPU_SCORES: dict[str, tuple[int, int]] = {
     "tap_count":     (18, 30),      # TapFrenzy: raw tap count over 5 s
-    "tracking":      (350, 600),    # BallTracker: contact ms
-    "rhythm":        (300, 550),    # RhythmPulse: timing accuracy points
+    "tracking":      (350, 600),    # BallTracker: +1 per pointer-move on ball
+    "rhythm":        (400, 800),    # RhythmPulse: 0-100 accuracy per tap, ~8-16 taps in 6 s
     "canvas_fill":   (35, 55),      # ColorRush: % filled
-    "accelerometer": (300, 550),    # TiltChase
-    "reaction":      (300, 600),    # ReactionSnap: ms-based score
-    "size_match":    (300, 600),    # SizeMatters
+    "accelerometer": (40, 140),     # TiltChase: +1/+3 per 100 ms near target over 7 s
+    "reaction":      (2500, 5000),  # ReactionSnap: ~700 per round × 5-8 rounds in 12 s
+    "size_match":    (2, 6),        # SizeMatters: match count, ~600 ms pause per match
     "memory":        (3, 7),        # MemoryFlash: correct sequence length
-    "dodge":         (300, 600),    # SwipeDodge: survival score
+    "dodge":         (25, 50),      # SwipeDodge: obstacles dodged over 20 s
     "target_tap":    (4, 10),       # TargetPop: pops
     "tower_builder": (12000, 25000),# TowerBuilder: cumulative block area
-    "color_drop":    (300, 550),    # ColorDrop: +10 per catch, up to 800
+    "color_drop":    (60, 140),     # ColorDrop: +10 per catch, ~15-20 marbles in 18 s
     "marble_runner": (1500, 4000),  # MarbleRunner: distance / 10
     "pump_it":       (60, 150),     # PumpIt: air pressure (no cap, leak rate limits)
     "light_switch":  (8, 18),       # LightSwitch: correct toggles in 7 s
@@ -52,14 +52,14 @@ async def run_cpu_turn(session, player, *,
       3. Makes decisions (which die, which tile, which target) automatically
     """
     # Thinking pause before rolling
-    await asyncio.sleep(random.uniform(1.8, 3.0))
+    await asyncio.sleep(random.uniform(0.8, 2.5))
 
     # ── Roll dice ───────────────────────────────────────────────────────────
     roll_result = await do_roll_dice(session, player.id)
 
     if roll_result["type"] == "advantage":
         # CPU always picks the higher die
-        await asyncio.sleep(random.uniform(1.0, 2.0))
+        await asyncio.sleep(random.uniform(0.8, 2.5))
         chosen_roll = max(roll_result["dice"])
         adv_result = await do_choose_advantage(session, player.id, chosen_roll)
         reachable = adv_result["reachable"]
@@ -70,17 +70,17 @@ async def run_cpu_turn(session, player, *,
 
     # ── Handle dizzy auto-move ──────────────────────────────────────────────
     if is_dizzy and reachable:
-        await asyncio.sleep(1.5)
+        await asyncio.sleep(random.uniform(0.8, 2.5))
         chosen = random.choice(reachable)
         effect_result = await do_choose_move(
             session, player.id, chosen["tileId"], chosen["path"], dizzy=True,
         )
         if effect_result.get("requiresChoice"):
-            await asyncio.sleep(random.uniform(1.5, 2.5))
+            await asyncio.sleep(random.uniform(0.8, 2.5))
             _cpu_handle_choice(effect_result, session, player, do_make_choice)
-            await asyncio.sleep(random.uniform(1.5, 2.5))
+            await asyncio.sleep(random.uniform(0.8, 2.5))
         # Wait for clients to see the effect overlay, then complete turn
-        await asyncio.sleep(random.uniform(3.0, 4.0))
+        await asyncio.sleep(random.uniform(0.8, 2.5))
         await do_turn_complete(session)
         return
 
@@ -94,7 +94,7 @@ async def run_cpu_turn(session, player, *,
         return
 
     # ── Choose a tile ───────────────────────────────────────────────────────
-    await asyncio.sleep(random.uniform(1.5, 2.5))
+    await asyncio.sleep(random.uniform(0.8, 2.5))
 
     chosen = _choose_tile(reachable, session, player)
     effect_result = await do_choose_move(
@@ -103,11 +103,11 @@ async def run_cpu_turn(session, player, *,
 
     # ── Handle effects that require a choice ────────────────────────────────
     if effect_result.get("requiresChoice"):
-        await asyncio.sleep(random.uniform(1.5, 2.5))
+        await asyncio.sleep(random.uniform(0.8, 2.5))
         await _cpu_handle_choice(effect_result, session, player, do_make_choice)
 
     # ── Wait for clients to see the effect overlay, then complete turn ──────
-    await asyncio.sleep(random.uniform(3.0, 4.0))
+    await asyncio.sleep(random.uniform(0.8, 2.5))
     await do_turn_complete(session)
 
 
