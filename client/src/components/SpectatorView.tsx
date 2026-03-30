@@ -1,4 +1,4 @@
-import { useMemo, useEffect } from 'react';
+import { useMemo, useEffect, useState, useCallback } from 'react';
 import type { GameState, MinigameResults, TileEffect, ActivityItem } from '../types/game';
 import { GameBoard, type MoveAnimation, type TileSwapAnimation } from './GameBoard';
 import { ActivityFeed } from './ActivityFeed';
@@ -49,6 +49,23 @@ export function SpectatorView({
     ? gameState.players[gameState.currentTurnPlayerId]
     : null;
 
+  // ── Fullscreen toggle ──────────────────────────────────────────────────
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const onChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', onChange);
+    return () => document.removeEventListener('fullscreenchange', onChange);
+  }, []);
+
+  const toggleFullscreen = useCallback(() => {
+    if (document.fullscreenElement) {
+      document.exitFullscreen();
+    } else {
+      document.documentElement.requestFullscreen().catch(() => {});
+    }
+  }, []);
+
   // Auto-dismiss overlays so they never get permanently stuck.
   // Don't start the countdown while the move animation is still running —
   // wait until it clears so the timer begins only once the overlay is visible.
@@ -97,6 +114,11 @@ export function SpectatorView({
             </span>
           )}
         </div>
+
+        {/* Fullscreen button */}
+        <button style={styles.fullscreenBtn} onClick={toggleFullscreen}>
+          {isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+        </button>
 
         {/* Event overlay - shows tile effects, battles, minigame results prominently.
             Gated on moveAnimation being null so the popup never covers the
@@ -219,6 +241,21 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: '12px',
     padding: '10px 16px',
     backdropFilter: 'blur(8px)',
+  },
+  fullscreenBtn: {
+    position: 'absolute',
+    top: '16px',
+    right: '16px',
+    padding: '8px 16px',
+    borderRadius: '8px',
+    border: '1px solid #233554',
+    background: 'rgba(17, 34, 64, 0.85)',
+    color: '#8892b0',
+    fontSize: '13px',
+    fontWeight: 600,
+    cursor: 'pointer',
+    backdropFilter: 'blur(8px)',
+    zIndex: 10,
   },
   turnNumber: {
     color: '#8892b0',
