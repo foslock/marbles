@@ -36,6 +36,7 @@ interface Props {
   onStealAnimationComplete?: () => void;
   activePlayerWaitState?: 'rolling' | 'choosing_tile' | 'choosing_target' | null;
   initialScale?: number;
+  isSpectator?: boolean;
 }
 
 // Tile dimensions
@@ -67,7 +68,7 @@ const MOVE_SPEED = 350;
 // ms for the landing ring animation after token arrives
 const LANDING_DURATION = 800;
 
-export function GameBoard({ board, players, reachableTiles, onTileClick, moveAnimation, onAnimationComplete, myPlayerId, activePlayerId, tileSwapAnimation, onSwapAnimationComplete, stealAnimation, onStealAnimationComplete, activePlayerWaitState, initialScale = PLAYER_ZOOM }: Props) {
+export function GameBoard({ board, players, reachableTiles, onTileClick, moveAnimation, onAnimationComplete, myPlayerId, activePlayerId, tileSwapAnimation, onSwapAnimationComplete, stealAnimation, onStealAnimationComplete, activePlayerWaitState, initialScale = PLAYER_ZOOM, isSpectator }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
@@ -1029,32 +1030,30 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
         onPointerLeave={handlePointerUp}
         onClick={handleClick}
       />
-      <div style={styles.zoomControls}>
-        {!hasScrollWheel && (
-          <>
-            <button style={styles.zoomBtn} onClick={() => setScale((s) => Math.min(5, s * 1.2))}>
-              +
-            </button>
-            <button style={styles.zoomBtn} onClick={() => setScale((s) => Math.max(0.3, s / 1.2))}>
-              -
-            </button>
-          </>
-        )}
-        <button
-          style={styles.zoomBtn}
-          title="Centre on me"
-          onClick={() => {
-            if (myPlayerId) {
-              centerOnMyPlayer();
-            } else {
+      {isSpectator && (
+        <div style={styles.zoomControls}>
+          {!hasScrollWheel && (
+            <>
+              <button style={styles.zoomBtn} onClick={() => setScale((s) => Math.min(5, s * 1.2))}>
+                +
+              </button>
+              <button style={styles.zoomBtn} onClick={() => setScale((s) => Math.max(0.3, s / 1.2))}>
+                -
+              </button>
+            </>
+          )}
+          <button
+            style={styles.zoomBtn}
+            title="Centre on me"
+            onClick={() => {
               setScale(1);
               setOffset({ x: 0, y: 0 });
-            }
-          }}
-        >
-          ⌂
-        </button>
-      </div>
+            }}
+          >
+            ⌂
+          </button>
+        </div>
+      )}
     </div>
   );
 }

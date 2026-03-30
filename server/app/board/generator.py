@@ -240,6 +240,8 @@ def generate_board(
         tiles[alt_ids[-1]].neighbors.append(merge_node)
         tiles[merge_node].neighbors.append(alt_ids[-1])
 
+    _enforce_spacing_constraints(tiles)
+
     _assign_tile_types(tiles)
 
     # Compute bounding box and normalize
@@ -367,6 +369,9 @@ def _generate_alt_route_positions(
     """Place alternate-route tiles along a cubic Bézier that departs and
     arrives at 85–95° from the fork→merge chord.  This ensures the alt path
     swings clearly away from the main loop, preventing tile overlaps.
+
+    Tiles are resampled equidistantly along the Bézier arc so spacing is
+    consistent regardless of curvature.
     """
     sx, sy = start_pos
     ex, ey = end_pos
@@ -390,9 +395,10 @@ def _generate_alt_route_positions(
     dep_x = nx * math.cos(tilt) - ny * math.sin(tilt)
     dep_y = nx * math.sin(tilt) + ny * math.cos(tilt)
 
-    # Control-arm length: governs how far the tangent extends from each
-    # endpoint.  A larger value pushes tiles further from the main loop.
-    bulge = length * 0.55 + random.uniform(25, 55)
+    # Control-arm length: push the branch far enough that tiles have room.
+    # Scale with tile count so more tiles get more space to spread out.
+    min_arc = count * MIN_TILE_DIST * 0.9  # rough minimum arc length needed
+    bulge = max(length * 0.55 + random.uniform(25, 55), min_arc * 0.45)
 
     # Cubic Bézier control points:
     #   P0 = fork tile,  P1 = fork + outward tangent
@@ -402,15 +408,174 @@ def _generate_alt_route_positions(
     p2 = (ex + dep_x * bulge, ey + dep_y * bulge)
     p3 = (ex, ey)
 
-    positions = []
-    for i in range(count):
-        t = (i + 1) / (count + 1)
+    # Dense sample of the Bézier then resample equidistantly
+    sample_n = max(200, count * 30)
+    raw: list[tuple[float, float]] = []
+    for i in range(sample_n + 1):
+        t = i / sample_n
         u = 1.0 - t
         bx = u**3 * p0[0] + 3*u**2*t * p1[0] + 3*u*t**2 * p2[0] + t**3 * p3[0]
         by = u**3 * p0[1] + 3*u**2*t * p1[1] + 3*u*t**2 * p2[1] + t**3 * p3[1]
-        positions.append((bx, by))
+        raw.append((bx, by))
+
+    # Cumulative arc lengths
+    cum = [0.0]
+    for i in range(1, len(raw)):
+        cum.append(cum[-1] + math.hypot(raw[i][0] - raw[i-1][0], raw[i][1] - raw[i-1][1]))
+    total_arc = cum[-1]
+
+    # Place `count` tiles equidistantly, excluding the start/end (fork/merge)
+    positions: list[tuple[float, float]] = []
+    for k in range(count):
+        target = total_arc * (k + 1) / (count + 1)
+        # Binary search for the segment
+        lo, hi = 0, len(cum) - 1
+        while lo < hi - 1:
+            mid = (lo + hi) // 2
+            if cum[mid] <= target:
+                lo = mid
+            else:
+                hi = mid
+        seg_len = cum[hi] - cum[lo]
+        frac = (target - cum[lo]) / seg_len if seg_len > 0 else 0.0
+        px = raw[lo][0] + frac * (raw[hi][0] - raw[lo][0])
+        py = raw[lo][1] + frac * (raw[hi][1] - raw[lo][1])
+        positions.append((px, py))
 
     return positions
+
+
+# ── Spacing constraints ──────────────────────────────────────────────────────
+# Tile width on the client is 38px; positions use the same coordinate system.
+_TILE_W = 38.0
+MIN_TILE_DIST = _TILE_W * 1.15       # no tile closer than ~1 tile width
+MAX_CONNECTED_DIST = _TILE_W * 3.0   # connected tiles no further than 3 widths
+
+
+def _enforce_spacing_constraints(tiles: dict[int, TileData]) -> None:
+    """Enforce min/max distance and reduce edge crossings.
+
+    Runs in two phases:
+    1. Distance-only relaxation until spacing is satisfied.
+    2. Crossing resolution interleaved with distance fixups.
+    """
+
+    ids = list(tiles.keys())
+    n = len(ids)
+
+    edges: set[tuple[int, int]] = set()
+    for tid, t in tiles.items():
+        for nid in t.neighbors:
+            edges.add((min(tid, nid), max(tid, nid)))
+    edge_list = list(edges)
+
+    # Soft targets with margin to prevent oscillation
+    soft_min = MIN_TILE_DIST + 2.0
+    soft_max = MAX_CONNECTED_DIST - 2.0
+
+    def _fix_distances() -> bool:
+        """One pass of distance corrections. Returns True if any correction was made."""
+        changed = False
+
+        # Repel tiles that are too close
+        for i in range(n):
+            for j in range(i + 1, n):
+                a, b = ids[i], ids[j]
+                ddx = tiles[b].x - tiles[a].x
+                ddy = tiles[b].y - tiles[a].y
+                dist = math.hypot(ddx, ddy)
+                if dist < soft_min:
+                    changed = True
+                    if dist < 0.01:
+                        angle = random.uniform(0, 2 * math.pi)
+                        ddx, ddy = math.cos(angle), math.sin(angle)
+                        dist = 1.0
+                    correction = (soft_min - dist) / 2.0
+                    ux, uy = ddx / dist, ddy / dist
+                    tiles[a].x -= ux * correction
+                    tiles[a].y -= uy * correction
+                    tiles[b].x += ux * correction
+                    tiles[b].y += uy * correction
+
+        # Pull connected tiles that are too far apart
+        for a, b in edge_list:
+            ddx = tiles[b].x - tiles[a].x
+            ddy = tiles[b].y - tiles[a].y
+            dist = math.hypot(ddx, ddy)
+            if dist > soft_max:
+                changed = True
+                correction = (dist - soft_max) / 2.0
+                ux, uy = ddx / dist, ddy / dist
+                tiles[a].x += ux * correction
+                tiles[a].y += uy * correction
+                tiles[b].x -= ux * correction
+                tiles[b].y -= uy * correction
+
+        return changed
+
+    # Phase 1: converge distances
+    for _ in range(200):
+        if not _fix_distances():
+            break
+
+    # Phase 2: resolve crossings then re-fix distances
+    for _ in range(100):
+        any_crossing = False
+        for i in range(len(edge_list)):
+            for j in range(i + 1, len(edge_list)):
+                e1 = edge_list[i]
+                e2 = edge_list[j]
+                if e1[0] in e2 or e1[1] in e2:
+                    continue
+                if _segments_intersect(
+                    tiles[e1[0]].x, tiles[e1[0]].y, tiles[e1[1]].x, tiles[e1[1]].y,
+                    tiles[e2[0]].x, tiles[e2[0]].y, tiles[e2[1]].x, tiles[e2[1]].y,
+                ):
+                    any_crossing = True
+                    m1x = (tiles[e1[0]].x + tiles[e1[1]].x) / 2
+                    m1y = (tiles[e1[0]].y + tiles[e1[1]].y) / 2
+                    m2x = (tiles[e2[0]].x + tiles[e2[1]].x) / 2
+                    m2y = (tiles[e2[0]].y + tiles[e2[1]].y) / 2
+                    sep = math.hypot(m2x - m1x, m2y - m1y)
+                    if sep < 0.01:
+                        angle = random.uniform(0, 2 * math.pi)
+                        ux, uy = math.cos(angle), math.sin(angle)
+                    else:
+                        ux, uy = (m2x - m1x) / sep, (m2y - m1y) / sep
+                    nudge = 10.0
+                    for tid in e1:
+                        tiles[tid].x -= ux * nudge
+                        tiles[tid].y -= uy * nudge
+                    for tid in e2:
+                        tiles[tid].x += ux * nudge
+                        tiles[tid].y += uy * nudge
+
+        if not any_crossing:
+            break
+
+        # Re-converge distances after crossing nudge
+        for _ in range(50):
+            if not _fix_distances():
+                break
+
+
+def _segments_intersect(
+    ax: float, ay: float, bx: float, by: float,
+    cx: float, cy: float, dx_: float, dy_: float,
+) -> bool:
+    """Return True if segment AB properly intersects segment CD."""
+    def cross(ox: float, oy: float, px: float, py: float, qx: float, qy: float) -> float:
+        return (px - ox) * (qy - oy) - (py - oy) * (qx - ox)
+
+    d1 = cross(cx, cy, dx_, dy_, ax, ay)
+    d2 = cross(cx, cy, dx_, dy_, bx, by)
+    d3 = cross(ax, ay, bx, by, cx, cy)
+    d4 = cross(ax, ay, bx, by, dx_, dy_)
+
+    if ((d1 > 0 and d2 < 0) or (d1 < 0 and d2 > 0)) and \
+       ((d3 > 0 and d4 < 0) or (d3 < 0 and d4 > 0)):
+        return True
+    return False
 
 
 def _assign_tile_types(tiles: dict[int, TileData]) -> None:

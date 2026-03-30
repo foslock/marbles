@@ -405,6 +405,7 @@ export function GameScreen({
             stealAnimation={stealAnimation}
             onStealAnimationComplete={handleClearStealAnimation}
             activePlayerWaitState={activePlayerWaitState}
+            isSpectator={isSpectator}
           />
         )}
 
