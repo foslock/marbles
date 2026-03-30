@@ -684,6 +684,12 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
 
     if (pathCoords.length < 2) return;
 
+    // Cancel any active smooth-pan so it doesn't fight with the follow camera
+    if (panRafRef.current) {
+      cancelAnimationFrame(panRafRef.current);
+      panRafRef.current = 0;
+    }
+
     animRef.current = {
       playerId: moveAnimation.playerId,
       path: pathCoords,
@@ -734,7 +740,7 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
         if (currentHop < pathCoords.length - 1) { SFX.tileStep(); Haptics.light(); }
       }
 
-      // Follow the moving token with the camera
+      // Follow the moving token with the camera (smooth zoom transition)
       if (
         moveAnimation.playerId === myPlayerIdRef.current ||
         moveAnimation.playerId === activePlayerIdRef.current
@@ -743,7 +749,10 @@ export function GameBoard({ board, players, reachableTiles, onTileClick, moveAni
         const t = anim.progress - seg;
         const ax = pathCoords[seg].x + (pathCoords[seg + 1].x - pathCoords[seg].x) * t;
         const ay = pathCoords[seg].y + (pathCoords[seg + 1].y - pathCoords[seg].y) * t;
-        centerOnTile(ax, ay, PLAYER_ZOOM);
+        // Lerp scale toward PLAYER_ZOOM so the zoom-in is smooth, not instant
+        const curScale = scaleRef.current;
+        const lerpedScale = curScale + (PLAYER_ZOOM - curScale) * 0.1;
+        centerOnTile(ax, ay, lerpedScale);
       }
 
       drawRef.current();
