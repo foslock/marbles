@@ -7,10 +7,12 @@ interface Props {
   currentPlayerId: string | null;
   hostId: string | null;
   onEndGame: () => void;
+  getDiagnostics?: () => unknown;
 }
 
-export function Scoreboard({ players, targetMarbles, currentPlayerId, hostId, onEndGame }: Props) {
+export function Scoreboard({ players, targetMarbles, currentPlayerId, hostId, onEndGame, getDiagnostics }: Props) {
   const [confirming, setConfirming] = useState(false);
+  const [copied, setCopied] = useState(false);
   const isHost = currentPlayerId === hostId;
   const sorted = [...players].sort((a, b) => {
     if (b.marbles !== a.marbles) return b.marbles - a.marbles;
@@ -50,6 +52,24 @@ export function Scoreboard({ players, targetMarbles, currentPlayerId, hostId, on
           </div>
         ))}
       </div>
+
+      {getDiagnostics && (
+        <div style={styles.diagnosticsSection}>
+          <button
+            style={styles.diagnosticsBtn}
+            onClick={() => {
+              const data = getDiagnostics();
+              const json = JSON.stringify(data, null, 2);
+              navigator.clipboard.writeText(json).then(() => {
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+              });
+            }}
+          >
+            {copied ? 'Copied!' : 'Capture Diagnostics'}
+          </button>
+        </div>
+      )}
 
       {isHost && (
         <div style={styles.endGameSection}>
@@ -150,6 +170,19 @@ const styles: Record<string, React.CSSProperties> = {
   pointCount: {
     color: '#8892b0',
     fontSize: '11px',
+  },
+  diagnosticsSection: {
+    marginTop: '16px',
+    textAlign: 'center',
+  },
+  diagnosticsBtn: {
+    padding: '8px 16px',
+    borderRadius: '8px',
+    border: '1px solid #233554',
+    background: 'transparent',
+    color: '#8892b0',
+    fontSize: '12px',
+    cursor: 'pointer',
   },
   endGameSection: {
     marginTop: '20px',
